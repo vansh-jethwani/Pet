@@ -1,426 +1,566 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useUser } from "@clerk/clerk-react";
 import Header from "@/components/Header";
-import {
-  MessageCircle,
-  Heart,
-  Share2,
-  Search,
-  Plus,
-  MessageSquare,
-  Eye,
-  TrendingUp,
-  User,
-  Calendar,
-  Filter,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { Post, Reply, PostCategory, CreatePostBody } from "@shared/api";
+import {
+  Heart, MessageSquare, Eye, Plus, Search, Filter, X,
+  Send, ChevronDown, ChevronUp, Flame, Clock, TrendingUp,
+  Tag, Loader2, AlertCircle, RefreshCw,
+} from "lucide-react";
 
-interface Post {
-  id: number;
-  author: string;
-  avatar: string;
-  title: string;
-  category: "tips" | "stories" | "questions" | "events";
-  content: string;
-  replies: number;
-  likes: number;
-  views: number;
-  date: string;
-  tags: string[];
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Category = "all" | PostCategory;
+type SortBy = "recent" | "popular" | "trending";
+
+interface PostWithLiked extends Post {
+  likedByMe: boolean;
+  replies: ReplyWithLiked[];
+}
+interface ReplyWithLiked extends Reply {
+  likedByMe: boolean;
 }
 
-const communityPosts: Post[] = [
-  {
-    id: 1,
-    author: "Sarah Johnson",
-    avatar: "👩",
-    title: "Best Training Tips for Golden Retrievers",
-    category: "tips",
-    content:
-      "Just completed a training course with my Golden Retriever and learned some amazing techniques! Here are my top 5 tips for training Golden Retrievers...",
-    replies: 23,
-    likes: 87,
-    views: 456,
-    date: "2 hours ago",
-    tags: ["Dogs", "Training", "Golden Retrievers"],
-  },
-  {
-    id: 2,
-    author: "Mike Chen",
-    avatar: "👨",
-    title: "My cat finally warmed up to me after 6 months!",
-    category: "stories",
-    content:
-      "I adopted a rescue cat 6 months ago and she was very shy. Today she sat on my lap for the first time! The journey has been incredible...",
-    replies: 45,
-    likes: 156,
-    views: 789,
-    date: "4 hours ago",
-    tags: ["Cats", "Adoption", "Love Stories"],
-  },
-  {
-    id: 3,
-    author: "Emily Davis",
-    avatar: "👩",
-    title: "Help! My dog won't stop barking at night",
-    category: "questions",
-    content:
-      "My 3-year-old labrador has suddenly started barking a lot at night. I've tried everything but nothing seems to help. Does anyone have experience with this?",
-    replies: 18,
-    likes: 34,
-    views: 234,
-    date: "5 hours ago",
-    tags: ["Dogs", "Behavior", "Help Needed"],
-  },
-  {
-    id: 4,
-    author: "Alex Martinez",
-    avatar: "👨",
-    title: "Pet Expo Coming to San Francisco - July 15th",
-    category: "events",
-    content:
-      "Great news everyone! The annual Pet Expo is coming to San Francisco on July 15th. There will be amazing vendors, contests, and activities for your pets!",
-    replies: 12,
-    likes: 56,
-    views: 345,
-    date: "1 day ago",
-    tags: ["Events", "San Francisco", "Family Activity"],
-  },
-  {
-    id: 5,
-    author: "Lisa Wong",
-    avatar: "👩",
-    title: "Healthy homemade dog treats recipe",
-    category: "tips",
-    content:
-      "I've been making homemade dog treats for my pups and they LOVE them! Here's my favorite recipe with all healthy, natural ingredients...",
-    replies: 34,
-    likes: 123,
-    views: 567,
-    date: "1 day ago",
-    tags: ["Recipes", "Dogs", "Health"],
-  },
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const API = "/api/community";
+
+const CATEGORY_META: Record<PostCategory, { label: string; color: string; bg: string }> = {
+  tips:      { label: "Tips & Advice",   color: "text-emerald-700", bg: "bg-emerald-100" },
+  stories:   { label: "Success Stories", color: "text-orange-700",  bg: "bg-orange-100"  },
+  questions: { label: "Questions",       color: "text-blue-700",    bg: "bg-blue-100"    },
+  events:    { label: "Events",          color: "text-purple-700",  bg: "bg-purple-100"  },
+};
+
+const SORT_OPTIONS: { value: SortBy; label: string; icon: React.ReactNode }[] = [
+  { value: "recent",   label: "Most Recent", icon: <Clock      className="w-4 h-4" /> },
+  { value: "popular",  label: "Most Liked",  icon: <Flame      className="w-4 h-4" /> },
+  { value: "trending", label: "Most Viewed", icon: <TrendingUp className="w-4 h-4" /> },
 ];
 
-const categoryLabels = {
-  tips: "Tips & Advice",
-  stories: "Success Stories",
-  questions: "Questions",
-  events: "Events",
-};
+// ─── API helpers ──────────────────────────────────────────────────────────────
 
-const categoryColors = {
-  tips: "from-blue-100 to-blue-50 text-blue-700",
-  stories: "from-pink-100 to-pink-50 text-pink-700",
-  questions: "from-yellow-100 to-yellow-50 text-yellow-700",
-  events: "from-green-100 to-green-50 text-green-700",
-};
+async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Network error" }));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
 
-export default function Community() {
-  const [selectedCategory, setSelectedCategory] = useState<
-    "all" | "tips" | "stories" | "questions" | "events"
-  >("all");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState<"recent" | "popular" | "trending">(
-    "recent"
+// ─── ReplyItem ────────────────────────────────────────────────────────────────
+
+function ReplyItem({ reply, onLike }: { reply: ReplyWithLiked; onLike: (id: string) => void }) {
+  return (
+    <div className="flex gap-3 py-3">
+      <div className="text-2xl flex-shrink-0">{reply.avatar}</div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="font-semibold text-gray-900 text-sm">{reply.author}</span>
+          <span className="text-xs text-gray-400">
+            {new Date(reply.createdAt).toLocaleString("en-IN", {
+              day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+            })}
+          </span>
+        </div>
+        <p className="text-gray-700 text-sm leading-relaxed">{reply.content}</p>
+        <button
+          onClick={() => onLike(reply.id)}
+          className={cn(
+            "mt-2 flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors",
+            reply.likedByMe ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+          )}
+        >
+          <Heart className="w-3 h-3 fill-current" />{reply.likes}
+        </button>
+      </div>
+    </div>
   );
-  const [likedPosts, setLikedPosts] = useState<number[]>([]);
-  const [showNewPost, setShowNewPost] = useState(false);
+}
 
-  const filteredPosts = communityPosts
-    .filter((post) => {
-      const matchesCategory = selectedCategory === "all" || post.category === selectedCategory;
-      const matchesSearch =
-        !searchTerm ||
-        post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        post.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        post.tags.some((tag) =>
-          tag.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-      return matchesCategory && matchesSearch;
-    })
-    .sort((a, b) => {
-      if (sortBy === "recent") return new Date(b.date) > new Date(a.date) ? 1 : -1;
-      if (sortBy === "popular") return b.likes - a.likes;
-      return b.views - a.views;
-    });
+// ─── PostCard ─────────────────────────────────────────────────────────────────
 
-  const handleLike = (id: number) => {
-    if (likedPosts.includes(id)) {
-      setLikedPosts(likedPosts.filter((p) => p !== id));
-    } else {
-      setLikedPosts([...likedPosts, id]);
+function PostCard({
+  post, onLikePost, onLikeReply, onAddReply, onExpand,
+}: {
+  post: PostWithLiked;
+  onLikePost: (id: string, liked: boolean) => void;
+  onLikeReply: (postId: string, replyId: string, liked: boolean) => void;
+  onAddReply: (postId: string, content: string) => Promise<void>;
+  onExpand: (id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [showReplyInput, setShowReplyInput] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const meta = CATEGORY_META[post.category];
+
+  const handleToggleExpand = () => {
+    if (!expanded) onExpand(post.id);
+    setExpanded((e) => !e);
+    setShowReplyInput(false);
+  };
+
+  const handleSubmitReply = async () => {
+    const trimmed = replyText.trim();
+    if (!trimmed || submitting) return;
+    setSubmitting(true);
+    await onAddReply(post.id, trimmed);
+    setReplyText("");
+    setShowReplyInput(false);
+    setExpanded(true);
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-gray-100">
+      <div className="p-6">
+        <div className="flex items-start gap-4 mb-4">
+          <div className="text-3xl flex-shrink-0">{post.avatar}</div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <p className="font-semibold text-gray-900">{post.author}</p>
+                <p className="text-xs text-gray-400">
+                  {new Date(post.createdAt).toLocaleString("en-IN", {
+                    day: "numeric", month: "short", year: "numeric",
+                    hour: "2-digit", minute: "2-digit",
+                  })}
+                </p>
+              </div>
+              <span className={cn("text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap", meta.bg, meta.color)}>
+                {meta.label}
+              </span>
+            </div>
+          </div>
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2 leading-snug">{post.title}</h2>
+        <p className="text-gray-600 leading-relaxed text-sm">{post.content}</p>
+        {post.tags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-4">
+            {post.tags.map((tag) => (
+              <span key={tag} className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full text-xs font-medium">
+                <Tag className="w-3 h-3" />{tag}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-4 text-sm text-gray-500">
+          <button onClick={handleToggleExpand} className="flex items-center gap-1.5 hover:text-orange-500 transition-colors font-medium">
+            <MessageSquare className="w-4 h-4" />
+            {post.replies.length} {post.replies.length === 1 ? "Reply" : "Replies"}
+            {post.replies.length > 0 && (expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />)}
+          </button>
+          <span className="flex items-center gap-1.5">
+            <Eye className="w-4 h-4" />{post.views}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onLikePost(post.id, post.likedByMe)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-colors",
+              post.likedByMe ? "bg-red-100 text-red-600" : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+            )}
+          >
+            <Heart className="w-4 h-4 fill-current" />{post.likes}
+          </button>
+          <button
+            onClick={() => { setShowReplyInput((s) => !s); if (!showReplyInput) setExpanded(true); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-orange-100 text-orange-600 hover:bg-orange-200 transition-colors"
+          >
+            <MessageSquare className="w-4 h-4" />Reply
+          </button>
+        </div>
+      </div>
+
+      {(expanded || showReplyInput) && (
+        <div className="px-6 pb-4 border-t border-gray-100">
+          {showReplyInput && (
+            <div className="flex gap-3 pt-4 pb-2">
+              <div className="text-2xl">🐾</div>
+              <div className="flex-1">
+                <textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="Write a reply..."
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none"
+                  onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmitReply(); }}
+                />
+                <div className="flex justify-end gap-2 mt-2">
+                  <button onClick={() => { setShowReplyInput(false); setReplyText(""); }} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 font-medium">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSubmitReply}
+                    disabled={!replyText.trim() || submitting}
+                    className="flex items-center gap-1.5 px-4 py-1.5 bg-orange-500 text-white text-sm font-semibold rounded-lg hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    Post Reply
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {expanded && post.replies.length > 0 && (
+            <div className="divide-y divide-gray-100 mt-1">
+              {post.replies.map((reply) => (
+                <ReplyItem key={reply.id} reply={reply} onLike={(rid) => onLikeReply(post.id, rid, reply.likedByMe)} />
+              ))}
+            </div>
+          )}
+          {expanded && post.replies.length === 0 && !showReplyInput && (
+            <p className="text-sm text-gray-400 text-center py-4">No replies yet — be the first!</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── NewPostModal ─────────────────────────────────────────────────────────────
+
+function NewPostModal({ onClose, onSubmit }: {
+  onClose: () => void;
+  onSubmit: (data: CreatePostBody) => Promise<void>;
+}) {
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [category, setCategory] = useState<PostCategory>("tips");
+  const [tagsInput, setTagsInput] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    const e: Record<string, string> = {};
+    if (!title.trim()) e.title = "Title is required";
+    if (!content.trim()) e.content = "Content is required";
+    setErrors(e);
+    if (Object.keys(e).length > 0 || submitting) return;
+
+    setSubmitting(true);
+    try {
+      const tags = tagsInput.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+      await onSubmit({ author: "You", avatar: "🐾", category, title: title.trim(), content: content.trim(), tags });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+          <h2 className="text-xl font-bold text-gray-900">Create New Post</h2>
+          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(Object.entries(CATEGORY_META) as [PostCategory, typeof CATEGORY_META[PostCategory]][]).map(([val, meta]) => (
+                <button key={val} onClick={() => setCategory(val)}
+                  className={cn("px-3 py-2 rounded-xl text-sm font-semibold border-2 transition-all",
+                    category === val ? `${meta.bg} ${meta.color} border-current` : "bg-gray-50 text-gray-600 border-transparent hover:bg-gray-100"
+                  )}>{meta.label}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Title</label>
+            <input value={title}
+              onChange={(e) => { setTitle(e.target.value); if (errors.title) setErrors((p) => ({ ...p, title: "" })); }}
+              placeholder="Give your post a clear, descriptive title..."
+              className={cn("w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent",
+                errors.title ? "border-red-400 bg-red-50" : "border-gray-200")}
+            />
+            {errors.title && <p className="text-xs text-red-600 mt-1">{errors.title}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Content</label>
+            <textarea value={content} rows={5}
+              onChange={(e) => { setContent(e.target.value); if (errors.content) setErrors((p) => ({ ...p, content: "" })); }}
+              placeholder="Share your story, question, tip, or event details..."
+              className={cn("w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none",
+                errors.content ? "border-red-400 bg-red-50" : "border-gray-200")}
+            />
+            {errors.content && <p className="text-xs text-red-600 mt-1">{errors.content}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Tags <span className="text-gray-400 font-normal">(optional, comma-separated)</span>
+            </label>
+            <input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)}
+              placeholder="e.g. dogs, training, behaviour"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+            />
+          </div>
+        </div>
+        <div className="flex gap-3 p-6 pt-0">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors">
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={submitting}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-orange-500 text-white font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Publish Post
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function Community() {
+  const { user } = useUser();
+  const currentAuthor = user?.firstName || user?.fullName || "You";
+
+  const [posts, setPosts] = useState<PostWithLiked[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category>("all");
+  const [sortBy, setSortBy] = useState<SortBy>("recent");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showNewPost, setShowNewPost] = useState(false);
+
+  const loadPosts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiFetch<Post[]>(`${API}/posts`);
+      setPosts(data.map((p) => ({
+        ...p,
+        likedByMe: false,
+        replies: p.replies.map((r) => ({ ...r, likedByMe: false })),
+      })));
+    } catch (e: any) {
+      setError(e.message || "Failed to load posts");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadPosts(); }, [loadPosts]);
+
+  const handleLikePost = async (postId: string, alreadyLiked: boolean) => {
+    const endpoint = alreadyLiked ? "unlike" : "like";
+    try {
+      const { likes } = await apiFetch<{ likes: number }>(`${API}/posts/${postId}/${endpoint}`, { method: "POST" });
+      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes, likedByMe: !alreadyLiked } : p));
+    } catch {}
+  };
+
+  const handleLikeReply = async (postId: string, replyId: string, alreadyLiked: boolean) => {
+    if (alreadyLiked) return;
+    try {
+      const { likes } = await apiFetch<{ likes: number }>(`${API}/replies/${replyId}/like`, { method: "POST" });
+      setPosts((prev) => prev.map((p) =>
+        p.id === postId
+          ? { ...p, replies: p.replies.map((r) => r.id === replyId ? { ...r, likes, likedByMe: true } : r) }
+          : p
+      ));
+    } catch {}
+  };
+
+  const handleAddReply = async (postId: string, content: string) => {
+    try {
+      const newReply = await apiFetch<Reply>(`${API}/posts/${postId}/replies`, {
+        method: "POST",
+        body: JSON.stringify({ author: currentAuthor, avatar: "🐾", content }),
+      });
+      setPosts((prev) => prev.map((p) =>
+        p.id === postId ? { ...p, replies: [...p.replies, { ...newReply, likedByMe: false }] } : p
+      ));
+    } catch {}
+  };
+
+  const handleNewPost = async (data: CreatePostBody) => {
+    try {
+      const newPost = await apiFetch<Post>(`${API}/posts`, {
+        method: "POST",
+        body: JSON.stringify({ ...data, author: currentAuthor }),
+      });
+      setPosts((prev) => [{ ...newPost, likedByMe: false, replies: [] }, ...prev]);
+      setShowNewPost(false);
+    } catch (e: any) {
+      alert("Failed to create post: " + e.message);
+    }
+  };
+
+  const handleIncrementViews = async (postId: string) => {
+    try {
+      await apiFetch(`${API}/posts/${postId}/view`, { method: "POST" });
+      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, views: p.views + 1 } : p));
+    } catch {}
+  };
+
+  const filteredPosts = posts
+    .filter((p) => {
+      const matchCat = selectedCategory === "all" || p.category === selectedCategory;
+      const q = searchTerm.toLowerCase();
+      const matchSearch = !q ||
+        p.title.toLowerCase().includes(q) ||
+        p.content.toLowerCase().includes(q) ||
+        p.author.toLowerCase().includes(q) ||
+        p.tags.some((t) => t.includes(q));
+      return matchCat && matchSearch;
+    })
+    .sort((a, b) => {
+      if (sortBy === "popular")  return b.likes  - a.likes;
+      if (sortBy === "trending") return b.views  - a.views;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+  const totalReplies = posts.reduce((s, p) => s + p.replies.length, 0);
+
+  return (
     <div className="min-h-screen bg-gray-50">
       <Header />
+      {showNewPost && <NewPostModal onClose={() => setShowNewPost(false)} onSubmit={handleNewPost} />}
 
-      {/* Hero Section */}
-      <section className="bg-gradient-to-br from-orange-50 via-white to-red-50 py-12 sm:py-16">
+      {/* Hero */}
+      <section className="bg-gradient-to-br from-orange-50 via-white to-amber-50 border-b border-gray-100 py-12 sm:py-16">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">
-            Pet Community
-          </h1>
-          <p className="text-lg text-gray-600 max-w-2xl">
-            Connect with other pet lovers, share stories, ask for advice, and
-            build friendships in our community.
-          </p>
+          <div className="max-w-2xl">
+            <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-3">Community</h1>
+            <p className="text-lg text-gray-600 mb-8">
+              Connect with pet lovers across India. Share tips, celebrate stories, ask questions, and discover local events.
+            </p>
+            <div className="flex flex-wrap items-end gap-6 text-sm">
+              <div><span className="text-2xl font-bold text-orange-500">4,821</span><p className="text-gray-500">Members</p></div>
+              <div><span className="text-2xl font-bold text-orange-500">{posts.length}</span><p className="text-gray-500">Posts</p></div>
+              <div><span className="text-2xl font-bold text-orange-500">{totalReplies}</span><p className="text-gray-500">Replies</p></div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* New Post Button & Search */}
-        <div className="mb-8 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex-1 w-full sm:max-w-md">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search discussions..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              />
-            </div>
-          </div>
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div className="grid lg:grid-cols-4 gap-8 items-start">
 
-          <button
-            onClick={() => setShowNewPost(!showNewPost)}
-            className="px-6 py-2 rounded-lg bg-orange-500 text-white font-semibold hover:bg-orange-600 transition-colors flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            New Post
-          </button>
-        </div>
-
-        <div className="grid lg:grid-cols-4 gap-8">
           {/* Sidebar */}
-          <div className="lg:col-span-1">
-            {/* New Post Form */}
-            {showNewPost && (
-              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-lg mb-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">
-                  Create New Post
-                </h3>
-                <div className="space-y-4">
-                  <input
-                    type="text"
-                    placeholder="Post title..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  />
-                  <textarea
-                    placeholder="What's on your mind?"
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  />
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                    <option>Select Category</option>
-                    <option value="tips">Tips & Advice</option>
-                    <option value="stories">Success Stories</option>
-                    <option value="questions">Questions</option>
-                    <option value="events">Events</option>
-                  </select>
-                  <div className="flex gap-2">
-                    <button className="flex-1 px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold hover:bg-orange-600 transition-colors">
-                      Post
-                    </button>
-                    <button
-                      onClick={() => setShowNewPost(false)}
-                      className="flex-1 px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+          <aside className="lg:col-span-1 space-y-6 sticky top-24">
+            <button
+              onClick={() => setShowNewPost(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-orange-500 text-white font-bold hover:bg-orange-600 transition-colors shadow-sm shadow-orange-200"
+            >
+              <Plus className="w-5 h-5" />New Post
+            </button>
+
+            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Filter className="w-4 h-4" /> Categories
+              </h3>
+              <div className="space-y-1">
+                {([{ value: "all", label: "All Posts" }, ...Object.entries(CATEGORY_META).map(([v, m]) => ({ value: v, label: m.label }))] as { value: Category; label: string }[]).map((cat) => (
+                  <button key={cat.value} onClick={() => setSelectedCategory(cat.value)}
+                    className={cn("w-full px-3 py-2 rounded-lg text-left text-sm font-semibold transition-all",
+                      selectedCategory === cat.value ? "bg-orange-500 text-white" : "text-gray-600 hover:bg-gray-100"
+                    )}>{cat.label}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Sort By</h3>
+              <div className="space-y-1">
+                {SORT_OPTIONS.map((opt) => (
+                  <button key={opt.value} onClick={() => setSortBy(opt.value)}
+                    className={cn("w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all",
+                      sortBy === opt.value ? "bg-orange-500 text-white" : "text-gray-600 hover:bg-gray-100"
+                    )}>{opt.icon}{opt.label}</button>
+                ))}
+              </div>
+            </div>
+          </aside>
+
+          {/* Feed */}
+          <main className="lg:col-span-3 space-y-5">
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input type="text" placeholder="Search posts, tags, or authors..." value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-11 pr-10 py-3 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent shadow-sm"
+              />
+              {searchTerm && (
+                <button onClick={() => setSearchTerm("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {(searchTerm || selectedCategory !== "all") && !loading && (
+              <p className="text-sm text-gray-500">
+                Showing <span className="font-semibold text-gray-700">{filteredPosts.length}</span>{" "}
+                {filteredPosts.length === 1 ? "post" : "posts"}
+                {selectedCategory !== "all" && ` in ${CATEGORY_META[selectedCategory as PostCategory].label}`}
+                {searchTerm && ` matching "${searchTerm}"`}
+              </p>
+            )}
+
+            {loading && (
+              <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                <Loader2 className="w-8 h-8 animate-spin mb-3" />
+                <p className="text-sm">Loading community posts…</p>
+              </div>
+            )}
+
+            {error && !loading && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-6 flex items-start gap-4">
+                <AlertCircle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-red-700 mb-1">Could not load posts</p>
+                  <p className="text-sm text-red-600 mb-3">{error}</p>
+                  <button onClick={loadPosts} className="flex items-center gap-2 text-sm font-semibold text-red-600 hover:text-red-700">
+                    <RefreshCw className="w-4 h-4" />Try again
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* Categories */}
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm sticky top-24">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <Filter className="w-5 h-5" />
-                Categories
-              </h3>
-
-              <div className="space-y-2">
-                {[
-                  { value: "all", label: "All Posts" },
-                  { value: "tips", label: "Tips & Advice" },
-                  { value: "stories", label: "Success Stories" },
-                  { value: "questions", label: "Questions" },
-                  { value: "events", label: "Events" },
-                ].map((cat) => (
-                  <button
-                    key={cat.value}
-                    onClick={() =>
-                      setSelectedCategory(
-                        cat.value as
-                          | "all"
-                          | "tips"
-                          | "stories"
-                          | "questions"
-                          | "events"
-                      )
-                    }
-                    className={cn(
-                      "w-full px-4 py-2 rounded-lg text-left font-semibold transition-all",
-                      selectedCategory === cat.value
-                        ? "bg-orange-500 text-white"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    )}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Sort Options */}
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm mt-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Sort By</h3>
-              <div className="space-y-2">
-                {[
-                  { value: "recent", label: "Most Recent" },
-                  { value: "popular", label: "Most Liked" },
-                  { value: "trending", label: "Most Viewed" },
-                ].map((sort) => (
-                  <button
-                    key={sort.value}
-                    onClick={() =>
-                      setSortBy(
-                        sort.value as "recent" | "popular" | "trending"
-                      )
-                    }
-                    className={cn(
-                      "w-full px-4 py-2 rounded-lg text-left font-semibold transition-all",
-                      sortBy === sort.value
-                        ? "bg-orange-500 text-white"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    )}
-                  >
-                    {sort.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Main Content */}
-          <div className="lg:col-span-3">
-            {filteredPosts.length === 0 ? (
-              <div className="bg-white rounded-2xl p-12 text-center border border-gray-100">
+            {!loading && !error && filteredPosts.length === 0 && (
+              <div className="bg-white rounded-2xl p-14 text-center border border-gray-100">
                 <div className="text-5xl mb-4">💬</div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                  No Posts Found
-                </h3>
-                <p className="text-gray-600 mb-4">
-                  Be the first to start a discussion!
+                <h3 className="text-xl font-bold text-gray-900 mb-2">No posts found</h3>
+                <p className="text-gray-500 text-sm mb-6">
+                  {searchTerm ? `No results for "${searchTerm}". Try a different search.` : "Be the first to post in this category!"}
                 </p>
-                <button
-                  onClick={() => setShowNewPost(true)}
-                  className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-orange-500 text-white font-semibold hover:bg-orange-600 transition-colors"
+                <button onClick={() => setShowNewPost(true)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-orange-500 text-white font-semibold hover:bg-orange-600 transition-colors"
                 >
-                  <Plus className="w-5 h-5" />
-                  Create Post
+                  <Plus className="w-4 h-4" />Create Post
                 </button>
               </div>
-            ) : (
-              <div className="space-y-6">
-                {filteredPosts.map((post) => (
-                  <div
-                    key={post.id}
-                    className="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow border border-gray-100"
-                  >
-                    {/* Post Header */}
-                    <div className="p-6 border-b border-gray-100">
-                      <div className="flex items-start gap-4 mb-4">
-                        <div className="text-3xl">{post.avatar}</div>
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <h3 className="text-lg font-bold text-gray-900">
-                                {post.author}
-                              </h3>
-                              <p className="text-sm text-gray-600">
-                                {post.date}
-                              </p>
-                            </div>
-                            <span
-                              className={cn(
-                                "px-3 py-1 rounded-full text-sm font-semibold whitespace-nowrap",
-                                categoryColors[post.category]
-                              )}
-                            >
-                              {categoryLabels[post.category]}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <h2 className="text-2xl font-bold text-gray-900 mb-3">
-                        {post.title}
-                      </h2>
-
-                      <p className="text-gray-600 mb-4 leading-relaxed">
-                        {post.content}
-                      </p>
-
-                      {/* Tags */}
-                      <div className="flex flex-wrap gap-2">
-                        {post.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm font-semibold hover:bg-gray-200 cursor-pointer transition-colors"
-                          >
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Post Footer */}
-                    <div className="px-6 py-4 bg-gray-50 flex items-center justify-between">
-                      <div className="flex items-center gap-6 text-sm text-gray-600 flex-wrap">
-                        <button className="flex items-center gap-2 hover:text-orange-500 transition-colors">
-                          <MessageSquare className="w-4 h-4" />
-                          {post.replies} Replies
-                        </button>
-                        <span className="flex items-center gap-2">
-                          <Eye className="w-4 h-4" />
-                          {post.views} Views
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => handleLike(post.id)}
-                          className={cn(
-                            "flex items-center gap-2 px-4 py-2 rounded-lg transition-colors",
-                            likedPosts.includes(post.id)
-                              ? "bg-red-100 text-red-600"
-                              : "bg-gray-200 text-gray-600 hover:bg-gray-300"
-                          )}
-                        >
-                          <Heart
-                            className="w-4 h-4 fill-current"
-                          />
-                          {likedPosts.includes(post.id)
-                            ? post.likes + 1
-                            : post.likes}
-                        </button>
-                        <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-100 text-orange-600 hover:bg-orange-200 transition-colors">
-                          <Share2 className="w-4 h-4" />
-                          Reply
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
             )}
-          </div>
+
+            {!loading && !error && filteredPosts.map((post) => (
+              <PostCard
+                key={post.id}
+                post={post}
+                onLikePost={handleLikePost}
+                onLikeReply={handleLikeReply}
+                onAddReply={handleAddReply}
+                onExpand={handleIncrementViews}
+              />
+            ))}
+          </main>
         </div>
       </div>
     </div>

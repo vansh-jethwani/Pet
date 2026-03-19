@@ -1,0 +1,59 @@
+import mongoose, { Schema, Document } from "mongoose";
+
+// ─── Reply Schema ─────────────────────────────────────────────────────────────
+
+export interface IReply {
+  _id: mongoose.Types.ObjectId;
+  author: string;
+  avatar: string;
+  content: string;
+  likes: number;
+  createdAt: Date;
+}
+
+const ReplySchema = new Schema<IReply>(
+  {
+    author:  { type: String, required: true },
+    avatar:  { type: String, default: "🐾" },
+    content: { type: String, required: true },
+    likes:   { type: Number, default: 0 },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } }
+);
+
+// ─── Post Schema ──────────────────────────────────────────────────────────────
+
+export interface IPost extends Document {
+  author:    string;
+  avatar:    string;
+  category:  "tips" | "stories" | "questions" | "events";
+  title:     string;
+  content:   string;
+  tags:      string[];
+  likes:     number;
+  views:     number;
+  replies:   IReply[];
+  createdAt: Date;
+}
+
+const PostSchema = new Schema<IPost>(
+  {
+    author:   { type: String, required: true },
+    avatar:   { type: String, default: "🐾" },
+    category: {
+      type: String,
+      required: true,
+      enum: ["tips", "stories", "questions", "events"],
+    },
+    title:   { type: String, required: true },
+    content: { type: String, required: true },
+    tags:    [{ type: String }],
+    likes:   { type: Number, default: 0 },
+    views:   { type: Number, default: 0 },
+    replies: [ReplySchema],
+  },
+  { timestamps: { createdAt: true, updatedAt: false } }
+);
+
+export const Post =
+  mongoose.models.Post || mongoose.model<IPost>("Post", PostSchema);

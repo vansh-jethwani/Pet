@@ -1,3 +1,4 @@
+import Dashboard from "./pages/Dashboard";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
 import Breeding from "./pages/Breeding";
@@ -21,6 +22,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/" element={<Home />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />

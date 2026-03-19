@@ -21,8 +21,10 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "dotenv": "^17.2.1",
-    "express": "^5.1.0",
+    "@clerk/clerk-react": "^5.61.3",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "mongoose": "^9.3.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -59,8 +61,10 @@
     "@swc/core": "^1.13.3",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/react-query": "^5.84.2",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
+    "@types/mongoose": "^5.11.97",
     "@types/node": "^24.2.1",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
@@ -70,7 +74,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "cors": "^2.8.5",
+    "cors": "^2.8.6",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.23.12",

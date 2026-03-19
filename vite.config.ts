@@ -1,10 +1,8 @@
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { createServer } from "./server";
 
-// https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+export default defineConfig({
   server: {
     host: "::",
     port: 8080,
@@ -23,17 +21,31 @@ export default defineConfig(({ mode }) => ({
       "@shared": path.resolve(__dirname, "./shared"),
     },
   },
-}));
+  optimizeDeps: {
+    exclude: ["better-sqlite3"],
+  },
+});
+
+let serverRegistered = false;
 
 function expressPlugin(): Plugin {
   return {
     name: "express-plugin",
-    apply: "serve", // Only apply during development (serve mode)
-    configureServer(server) {
-      const app = createServer();
+    apply: "serve",
+    async configureServer(viteServer) {
+      if (serverRegistered) return;
+      serverRegistered = true;
 
-      // Add Express app as middleware to Vite dev server
-      server.middlewares.use(app);
+      try {
+        const { createServer } = await import("./server/index.js");
+        const app = await createServer();
+        // Use unshift to put Express BEFORE Vite's own handlers
+      // Mount the app root so routes defined as /api/* in the app work directly.
+      viteServer.middlewares.use(app);
+      console.log("✅ Express routes registered on root path");
+      } catch (err) {
+        console.error("❌ Failed to start Express:", err);
+      }
     },
   };
 }

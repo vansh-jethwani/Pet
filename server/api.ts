@@ -1,12 +1,7 @@
 /**
- * Shared code between client and server
- * Useful to share types between client and server
- * and/or small pure JS functions that can be used on both client and server
+ * Shared types between client and server
  */
 
-/**
- * Example response type for /api/demo
- */
 export interface DemoResponse {
   message: string;
 }
@@ -16,7 +11,7 @@ export interface DemoResponse {
 export type PostCategory = "tips" | "stories" | "questions" | "events";
 
 export interface Reply {
-  id: string;
+  id: string;         // MongoDB ObjectId as string
   postId: string;
   author: string;
   avatar: string;
@@ -26,7 +21,7 @@ export interface Reply {
 }
 
 export interface Post {
-  id: string;
+  id: string;         // MongoDB ObjectId as string
   author: string;
   avatar: string;
   category: PostCategory;
@@ -39,6 +34,7 @@ export interface Post {
   replies: Reply[];
 }
 
+// Request bodies
 export interface CreatePostBody {
   author: string;
   avatar: string;

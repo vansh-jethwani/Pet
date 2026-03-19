@@ -1,0 +1,7 @@
+ignoredBuiltDependencies:
+  - '@clerk/shared'
+  - '@swc/core'
+  - esbuild
+
+onlyBuiltDependencies:
+  - better-sqlite3
