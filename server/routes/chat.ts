@@ -225,6 +225,9 @@ export function registerChatHandlers(io: Server) {
             })
           );
 
+          // Auto-join all room socket channels so owner gets new_message in real-time
+          myRooms.forEach((r) => socket.join(r.id));
+
           socket.emit("owner_inbox", { rooms: myRooms });
           console.log(
             `📬 owner ${ownerId} (${ownerName}) subscribed, ${myRooms.length} rooms`
@@ -282,6 +285,9 @@ export function registerChatHandlers(io: Server) {
             rooms.set(room.id, room);
             return serializeRoom(room);
           });
+
+          // Auto-join all room socket channels so seeker gets new_message in real-time
+          myRooms.forEach((r) => socket.join(r.id));
 
           socket.emit("seeker_inbox", { rooms: myRooms });
           console.log(
@@ -545,29 +551,29 @@ export function registerChatHandlers(io: Server) {
           // FIX: persist to MongoDB correctly
           await persistMessage(data.roomId, msg);
 
-          // 1. Deliver to everyone in the socket room
+          // 1. Deliver to everyone already in the socket room (both parties if online)
           ns.to(data.roomId).emit("new_message", msg);
 
-          // 2. Push to owner notification channels
-          ns.to(ownerChannel(room.ownerId)).emit("inbox_message", {
-            roomId: data.roomId,
-            message: msg,
-            petName: room.petName,
+          // 2. Push via notification channels — guaranteed delivery regardless of
+          //    whether the socket has joined the room directly.
+          //    Both owner AND seeker get inbox_message so real-time works for both.
+          const inboxPayload = {
+            roomId:     data.roomId,
+            message:    msg,
+            petName:    room.petName,
             seekerName: room.seekerName,
-          });
-          ns.to(ownerNameChannel(room.ownerName)).emit("inbox_message", {
-            roomId: data.roomId,
-            message: msg,
-            petName: room.petName,
-            seekerName: room.seekerName,
-          });
+          };
 
-          // 3. Push to seeker notification channel
-          ns.to(seekerChannel(room.seekerId)).emit("inbox_message", {
-            roomId: data.roomId,
-            message: msg,
-            petName: room.petName,
-          });
+          // Owner channels
+          ns.to(ownerChannel(room.ownerId)).emit("inbox_message", inboxPayload);
+          ns.to(ownerNameChannel(room.ownerName)).emit("inbox_message", inboxPayload);
+
+          // Seeker channel
+          ns.to(seekerChannel(room.seekerId)).emit("inbox_message", inboxPayload);
+
+          // Also emit back to the sender's own socket directly
+          // so they get confirmation even if not in a named channel
+          socket.emit("inbox_message", inboxPayload);
 
           console.log(
             `💬 msg in ${data.roomId} from ${data.senderName}: ${data.text.slice(0, 40)}`

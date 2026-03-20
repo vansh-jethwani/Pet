@@ -361,16 +361,21 @@ function CallOverlay({
   onCam: () => void;
   onEnd: () => void;
 }) {
-  const localRef = useRef<HTMLVideoElement>(null);
+  const localRef  = useRef<HTMLVideoElement>(null);
   const remoteRef = useRef<HTMLVideoElement>(null);
+  const audioRef  = useRef<HTMLAudioElement>(null);  // for voice-only calls
 
   useEffect(() => {
     if (localRef.current && localStream)
       localRef.current.srcObject = localStream;
   }, [localStream]);
+
   useEffect(() => {
-    if (remoteRef.current && remoteStream)
-      remoteRef.current.srcObject = remoteStream;
+    if (!remoteStream) return;
+    // Video call: attach to video element
+    if (remoteRef.current) remoteRef.current.srcObject = remoteStream;
+    // Voice call: attach to audio element so audio always plays
+    if (audioRef.current)  audioRef.current.srcObject  = remoteStream;
   }, [remoteStream]);
 
   const isVoice =
@@ -383,6 +388,9 @@ function CallOverlay({
 
   return (
     <div className="absolute inset-0 z-40 call-bg flex flex-col rounded-r-2xl overflow-hidden anim-popIn">
+      {/* Hidden audio element — always present so voice call audio plays */}
+      <audio ref={audioRef} autoPlay playsInline style={{ display: "none" }} />
+
       <div className="flex-1 relative flex items-center justify-center bg-slate-950">
         {!isVoice && remoteStream ? (
           <video
@@ -535,7 +543,10 @@ export default function ChatPage() {
   const [isCameraOff,  setIsCameraOff]  = useState(false);
   const [callElapsed,  setCallElapsed]  = useState(0);
   const [callError,    setCallError]    = useState<string | null>(null);
-  const ringtoneRef  = useRef<HTMLAudioElement | null>(null);
+  const ringtoneRef      = useRef<HTMLAudioElement | null>(null);
+  // Refs so socket callbacks (closures) can always call the latest ringtone fns
+  const startRingtoneRef = useRef<() => void>(() => {});
+  const stopRingtoneRef  = useRef<() => void>(() => {});
   const [showSidebar,  setShowSidebar]  = useState(true);
 
   // FIX: single setter that keeps ref in sync
@@ -614,10 +625,18 @@ export default function ChatPage() {
     };
     pc.ontrack = (e) => setRemoteStream(e.streams[0]);
     pc.onconnectionstatechange = () => {
-      if (
+      console.log("[WebRTC] connectionState:", pc.connectionState);
+      if (pc.connectionState === "connected") {
+        // Peer connection is truly established — update status to connected
+        setCallInfo((prev) => ({
+          ...prev,
+          status: prev.callType === "voice" ? "voice_connected" : "connected",
+        }));
+      } else if (
         pc.connectionState === "disconnected" ||
         pc.connectionState === "failed"
       ) {
+        stopRingtoneRef.current();
         cleanupCall();
         setCallInfo({ status: "ended" });
         setTimeout(() => setCallInfo({ status: "idle" }), 2500);
@@ -639,16 +658,26 @@ export default function ChatPage() {
 
   const createAndSendOffer = useCallback(
     async (targetSocketId: string) => {
-      const pc    = getPC();
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socketRef.current?.emit("webrtc_offer", {
-        roomId: activeRoomIdRef.current,
-        offer,
-        targetSocketId,
-      });
+      // Use existing PC which already has tracks — do NOT call getPC() here
+      // as that could create a new empty PC without the local stream tracks
+      const pc = pcRef.current;
+      if (!pc) {
+        console.error("[WebRTC] createAndSendOffer: no RTCPeerConnection");
+        return;
+      }
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socketRef.current?.emit("webrtc_offer", {
+          roomId: activeRoomIdRef.current,
+          offer,
+          targetSocketId,
+        });
+      } catch (err) {
+        console.error("[WebRTC] createOffer failed:", err);
+      }
     },
-    [getPC]
+    [] // no deps — reads pcRef directly
   );
 
   /* ── Socket.io setup ────────────────────────────────────────────────────── */
@@ -751,61 +780,73 @@ export default function ChatPage() {
       }
     );
 
-    /* ── new_message: real-time message in current room ── */
+    /* ── new_message: arrives when socket has joined the room directly.
+          inbox_message already handles the message list, so here we just
+          de-duplicate to avoid showing messages twice. ── */
     socket.on("new_message", (msg: ChatMessage) => {
       if (msg.roomId === activeRoomIdRef.current) {
         setMessages((prev) => {
-          // Already exists by real ID — skip
-          if (prev.some((m) => m.id === msg.id)) return prev;
-          // Replace matching optimistic message (same sender + text + within 10s)
-          const optIdx = prev.findIndex(
-            (m) =>
-              m.id.startsWith("opt_") &&
-              m.senderId === msg.senderId &&
-              m.text === msg.text &&
-              Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10000
-          );
-          if (optIdx !== -1) {
-            const next = [...prev];
-            next[optIdx] = msg; // swap optimistic with real
-            return next;
-          }
+          // Already added by inbox_message — skip
+          if (prev.some((m) => m.id === msg.id || (m.id.startsWith("opt_") && m.senderId === msg.senderId && m.text === msg.text))) return prev;
           return [...prev, msg];
         });
-        setRooms((prev) =>
-          prev.map((r) =>
-            r.id === msg.roomId ? { ...r, unread: 0 } : r
-          )
-        );
       } else {
         setRooms((prev) =>
           prev.map((r) => {
             if (r.id !== msg.roomId) return r;
             if (r.messages.some((m) => m.id === msg.id)) return r;
-            return { ...r, messages: [...r.messages, msg], unread: r.unread + 1 };
+            return { ...r, messages: [...r.messages, msg] };
           })
         );
       }
     });
 
-    /* ── inbox_message: FIX — only update room preview/unread, NOT message list.
-          new_message handles the message list to avoid duplicates. ── */
+    /* ── inbox_message: arrives on notification channels (owner_xxx / seeker_xxx).
+          This is the ONLY guaranteed delivery path for the receiver since they may
+          not have socket.join(roomId) yet. So we MUST update both the message list
+          AND the room preview here. ── */
     socket.on(
       "inbox_message",
       (data: { roomId: string; message: ChatMessage }) => {
         const { roomId, message: msg } = data;
-        // Only update room list preview — message list is handled by new_message
-        setRooms((prev) =>
-          prev.map((r) => {
-            if (r.id !== roomId) return r;
-            const already = r.messages.some((m) => m.id === msg.id);
-            return {
-              ...r,
-              messages: already ? r.messages : [...r.messages, msg],
-              // Don't touch unread here — new_message already handled it
-            };
-          })
-        );
+
+        // If this room is currently open, add to message list
+        if (roomId === activeRoomIdRef.current) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            // Replace matching optimistic message
+            const optIdx = prev.findIndex(
+              (m) =>
+                m.id.startsWith("opt_") &&
+                m.senderId === msg.senderId &&
+                m.text === msg.text &&
+                Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10000
+            );
+            if (optIdx !== -1) {
+              const next = [...prev];
+              next[optIdx] = msg;
+              return next;
+            }
+            return [...prev, msg];
+          });
+          // Mark as read since it's the active room
+          setRooms((prev) =>
+            prev.map((r) => (r.id === roomId ? { ...r, unread: 0 } : r))
+          );
+        } else {
+          // Background room — update preview and increment unread
+          setRooms((prev) =>
+            prev.map((r) => {
+              if (r.id !== roomId) return r;
+              if (r.messages.some((m) => m.id === msg.id)) return r;
+              return {
+                ...r,
+                messages: [...r.messages, msg],
+                unread: r.unread + 1,
+              };
+            })
+          );
+        }
       }
     );
 
@@ -881,43 +922,65 @@ export default function ChatPage() {
         fromSocketId:   string;
       }) => {
         remoteSocketRef.current = data.fromSocketId;
-        const pc = getPC();
-        // Re-add local tracks if PC was recreated and stream exists
-        if (localStreamRef.current) {
-          addTracksToPC(pc, localStreamRef.current);
+        // Use existing PC (created in acceptCall with tracks) — don't call getPC()
+        let pc = pcRef.current;
+        if (!pc) {
+          // Fallback: create PC and add tracks if somehow not created yet
+          pc = getPC();
+          if (localStreamRef.current) addTracksToPC(pc, localStreamRef.current);
         }
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        for (const c of icePendingRef.current)
-          await pc.addIceCandidate(new RTCIceCandidate(c));
-        icePendingRef.current = [];
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit("webrtc_answer", {
-          roomId:         activeRoomIdRef.current,
-          answer,
-          targetSocketId: data.fromSocketId,
-        });
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+          // Flush pending ICE candidates
+          for (const c of icePendingRef.current)
+            await pc.addIceCandidate(new RTCIceCandidate(c));
+          icePendingRef.current = [];
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.emit("webrtc_answer", {
+            roomId:         activeRoomIdRef.current,
+            answer,
+            targetSocketId: data.fromSocketId,
+          });
+        } catch (err) {
+          console.error("[WebRTC] webrtc_offer handling failed:", err);
+        }
       }
     );
 
     socket.on(
       "webrtc_answer",
       async (data: { answer: RTCSessionDescriptionInit }) => {
-        await pcRef.current?.setRemoteDescription(
-          new RTCSessionDescription(data.answer)
-        );
+        const pc = pcRef.current;
+        if (!pc) return;
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+          // Flush any ICE candidates that arrived before remote description
+          for (const c of icePendingRef.current) {
+            await pc.addIceCandidate(new RTCIceCandidate(c));
+          }
+          icePendingRef.current = [];
+        } catch (err) {
+          console.error("[WebRTC] setRemoteDescription(answer) failed:", err);
+        }
       }
     );
 
     socket.on(
       "webrtc_ice_candidate",
-      async (data: { candidate: RTCIceCandidateInit }) => {
+      async (data: { candidate: RTCIceCandidateInit | null }) => {
+        if (!data.candidate) return; // null = end-of-candidates signal, ignore
         const pc = pcRef.current;
         if (!pc || !pc.remoteDescription) {
           icePendingRef.current.push(data.candidate);
           return;
         }
-        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } catch (err) {
+          // Ignore benign ICE errors (e.g. candidate added after connection)
+          console.warn("[WebRTC] addIceCandidate failed:", err);
+        }
       }
     );
 
@@ -1059,7 +1122,10 @@ export default function ChatPage() {
   /* ── Call helpers ────────────────────────────────────────────────────────── */
   async function acquireMedia(video: boolean): Promise<MediaStream> {
     try {
-      return await navigator.mediaDevices.getUserMedia({ video, audio: true });
+      const constraints: MediaStreamConstraints = video
+        ? { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true }
+        : { audio: true, video: false };
+      return await navigator.mediaDevices.getUserMedia(constraints);
     } catch (err: any) {
       const name = err?.name ?? "";
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
@@ -1072,10 +1138,6 @@ export default function ChatPage() {
       throw new Error("Could not access microphone. Please check browser permissions.");
     }
   }
-
-  // Use refs so ringtone functions are accessible inside socket callbacks
-  const startRingtoneRef = useRef<() => void>(() => {});
-  const stopRingtoneRef  = useRef<() => void>(() => {});
 
   const startRingtone = useCallback(() => {
     // Simple ringtone using Web Audio API — no external file needed
