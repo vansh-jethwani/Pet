@@ -56,4 +56,4 @@ const PostSchema = new Schema<IPost>(
 );
 
 export const Post =
-  mongoose.models.Post || mongoose.model<IPost>("Post", PostSchema);
+  (mongoose.models.Post as mongoose.Model<IPost> | undefined) || mongoose.model<IPost>("Post", PostSchema);

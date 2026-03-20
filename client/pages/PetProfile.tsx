@@ -16,6 +16,9 @@ interface Pet {
   vaccinated: boolean;
 }
 
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
 export default function PetProfile() {
   const [pets, setPets] = useState<Pet[]>([
     {
@@ -33,6 +36,8 @@ export default function PetProfile() {
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     type: "dog" as "dog" | "cat" | "fish" | "bird",
@@ -42,6 +47,7 @@ export default function PetProfile() {
     location: "",
     bio: "",
     vaccinated: false,
+    photo: "",
   });
 
   const handleAddClick = () => {
@@ -55,6 +61,7 @@ export default function PetProfile() {
       location: "",
       bio: "",
       vaccinated: false,
+      photo: "",
     });
     setShowForm(true);
   };
@@ -70,6 +77,7 @@ export default function PetProfile() {
       location: pet.location,
       bio: pet.bio,
       vaccinated: pet.vaccinated,
+      photo: pet.photo ?? "",
     });
     setShowForm(true);
   };
@@ -101,6 +109,7 @@ export default function PetProfile() {
                 location: formData.location,
                 bio: formData.bio,
                 vaccinated: formData.vaccinated,
+                photo: formData.photo || undefined,
               }
             : pet
         )
@@ -117,6 +126,7 @@ export default function PetProfile() {
         location: formData.location,
         bio: formData.bio,
         vaccinated: formData.vaccinated,
+        photo: formData.photo || undefined,
       };
       setPets([...pets, newPet]);
     }
@@ -295,6 +305,69 @@ export default function PetProfile() {
                   />
                 </div>
 
+                {/* Photo Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pet Photo
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+
+                      if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+                        setUploadError("Cloudinary configuration missing. Set VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET in .env");
+                        return;
+                      }
+
+                      setIsUploadingPhoto(true);
+                      setUploadError(null);
+
+                      try {
+                        const uploadData = new FormData();
+                        uploadData.append("file", file);
+                        uploadData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+                        const res = await fetch(
+                          `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+                          { method: "POST", body: uploadData }
+                        );
+                        const json = await res.json();
+
+                        if (!res.ok) {
+                          throw new Error(json.error?.message || "Cloudinary upload failed");
+                        }
+
+                        setFormData({ ...formData, photo: json.secure_url });
+                      } catch (error: any) {
+                        setUploadError(error?.message || "Upload failed");
+                      } finally {
+                        setIsUploadingPhoto(false);
+                      }
+                    }}
+                    className="w-full text-sm text-gray-600"
+                  />
+
+                  {isUploadingPhoto && (
+                    <p className="mt-2 text-sm text-blue-600">Uploading image to Cloudinary...</p>
+                  )}
+                  {uploadError && (
+                    <p className="mt-2 text-sm text-red-600">{uploadError}</p>
+                  )}
+
+                  {formData.photo && (
+                    <div className="mt-3">
+                      <img
+                        src={formData.photo}
+                        alt="Preview"
+                        className="h-32 w-32 rounded-xl object-cover border border-gray-200"
+                      />
+                    </div>
+                  )}
+                </div>
+
                 {/* Vaccinated Checkbox */}
                 <div className="flex items-center gap-3">
                   <input
@@ -343,18 +416,24 @@ export default function PetProfile() {
                     key={pet.id}
                     className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-shadow"
                   >
-                    {/* Pet Photo Placeholder */}
-                    <div className="bg-gradient-to-br from-orange-400 to-orange-600 h-48 flex items-center justify-center">
-                      <span className="text-5xl">
-                        {pet.type === "dog"
-                          ? "🐕"
-                          : pet.type === "cat"
-                          ? "🐱"
-                          : pet.type === "fish"
-                          ? "🐠"
-                          : "🐦"}
-                      </span>
-                    </div>
+                    {/* Pet Photo Display */}
+                    {pet.photo ? (
+                      <div className="h-48 overflow-hidden">
+                        <img src={pet.photo} alt={pet.name} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="bg-gradient-to-br from-orange-400 to-orange-600 h-48 flex items-center justify-center">
+                        <span className="text-5xl">
+                          {pet.type === "dog"
+                            ? "🐕"
+                            : pet.type === "cat"
+                            ? "🐱"
+                            : pet.type === "fish"
+                            ? "🐠"
+                            : "🐦"}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Pet Details */}
                     <div className="p-6">

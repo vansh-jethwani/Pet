@@ -1,5 +1,6 @@
 import { RequestHandler, Router } from "express";
 import { Post } from "../models/Post.js";
+import { io } from "../index.js";
 import type { CreatePostBody, CreateReplyBody } from "@shared/api";
 
 const router = Router();
@@ -58,7 +59,12 @@ router.post("/posts", (async (req, res) => {
     tags:    Array.isArray(tags) ? tags : [],
   });
 
-  res.status(201).json(formatPost(post));
+  const formatted = formatPost(post);
+
+  // 🔴 Real-time: broadcast new post to ALL connected clients
+  io.emit("new_post", formatted);
+
+  res.status(201).json(formatted);
 }) as RequestHandler);
 
 // ─── POST /api/community/posts/:id/like ──────────────────────────────────────
@@ -70,6 +76,10 @@ router.post("/posts/:id/like", (async (req, res) => {
     { new: true }
   );
   if (!post) return res.status(404).json({ error: "Post not found" });
+
+  // 🔴 Real-time: broadcast updated like count to ALL clients
+  io.emit("post_liked", { id: req.params.id, likes: post.likes });
+
   res.json({ likes: post.likes });
 }) as RequestHandler);
 
@@ -82,13 +92,29 @@ router.post("/posts/:id/unlike", (async (req, res) => {
     { new: true }
   );
   if (!post) return res.status(404).json({ error: "Post not found" });
-  res.json({ likes: Math.max(0, post.likes) });
+
+  const likes = Math.max(0, post.likes);
+
+  // 🔴 Real-time: broadcast updated like count to ALL clients
+  io.emit("post_liked", { id: req.params.id, likes });
+
+  res.json({ likes });
 }) as RequestHandler);
 
 // ─── POST /api/community/posts/:id/view ──────────────────────────────────────
 
 router.post("/posts/:id/view", (async (req, res) => {
-  await Post.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } });
+  const post = await Post.findByIdAndUpdate(
+    req.params.id,
+    { $inc: { views: 1 } },
+    { new: true }
+  );
+
+  if (post) {
+    // 🔴 Real-time: broadcast updated view count to ALL clients
+    io.emit("post_viewed", { id: req.params.id, views: post.views });
+  }
+
   res.json({ ok: true });
 }) as RequestHandler);
 
@@ -118,7 +144,7 @@ router.post("/posts/:id/replies", (async (req, res) => {
   if (!post) return res.status(404).json({ error: "Post not found" });
 
   const newReply = post.replies[post.replies.length - 1];
-  res.status(201).json({
+  const replyPayload = {
     id:        newReply._id.toString(),
     postId:    post._id.toString(),
     author:    newReply.author,
@@ -126,7 +152,12 @@ router.post("/posts/:id/replies", (async (req, res) => {
     content:   newReply.content,
     likes:     newReply.likes,
     createdAt: newReply.createdAt,
-  });
+  };
+
+  // 🔴 Real-time: broadcast new reply to ALL clients
+  io.emit("new_reply", { postId: req.params.id, reply: replyPayload });
+
+  res.status(201).json(replyPayload);
 }) as RequestHandler);
 
 // ─── POST /api/community/replies/:replyId/like ───────────────────────────────
@@ -142,6 +173,14 @@ router.post("/replies/:replyId/like", (async (req, res) => {
   const reply = post.replies.find(
     (r) => r._id.toString() === req.params.replyId
   );
+
+  // 🔴 Real-time: broadcast updated reply like count to ALL clients
+  io.emit("reply_liked", {
+    postId:  post._id.toString(),
+    replyId: req.params.replyId,
+    likes:   reply?.likes ?? 0,
+  });
+
   res.json({ likes: reply?.likes ?? 0 });
 }) as RequestHandler);
 

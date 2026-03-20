@@ -11,7 +11,6 @@ export default function Header() {
 
   const navItems = [
     { label: "Home", href: "/" },
-    { label: "My Pets", href: "/pet-profile" },
     { label: "Breeding Match", href: "/breeding" },
     { label: "Adoption", href: "/adoption" },
     { label: "Host a Pet", href: "/hosting" },

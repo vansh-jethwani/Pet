@@ -11,7 +11,6 @@ import Store from "./pages/Store";
 import Community from "./pages/Community";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
-import PetProfile from "./pages/PetProfile";
 import DogsCategory from "./pages/categories/DogsCategory";
 import CatsCategory from "./pages/categories/CatsCategory";
 import FishCategory from "./pages/categories/FishCategory";
@@ -26,7 +25,6 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
-        <Route path="/pet-profile" element={<PetProfile />} />
         <Route path="/category/dogs" element={<DogsCategory />} />
         <Route path="/category/cats" element={<CatsCategory />} />
         <Route path="/category/fish" element={<FishCategory />} />

@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useUser } from "@clerk/clerk-react";
+import { io as socketIO, Socket } from "socket.io-client";
 import Header from "@/components/Header";
 import { cn } from "@/lib/utils";
 import type { Post, Reply, PostCategory, CreatePostBody } from "@shared/api";
 import {
   Heart, MessageSquare, Eye, Plus, Search, Filter, X,
   Send, ChevronDown, ChevronUp, Flame, Clock, TrendingUp,
-  Tag, Loader2, AlertCircle, RefreshCw,
+  Tag, Loader2, AlertCircle, RefreshCw, Wifi, WifiOff,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -340,6 +341,11 @@ export default function Community() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showNewPost, setShowNewPost] = useState(false);
 
+  // ── Socket.io connection state ──
+  const [isConnected, setIsConnected] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
+
+  // ── Initial data load ──
   const loadPosts = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -357,26 +363,142 @@ export default function Community() {
     }
   }, []);
 
-  useEffect(() => { loadPosts(); }, [loadPosts]);
+  useEffect(() => {
+    loadPosts();
+  }, [loadPosts]);
+
+  // ── Socket.io: connect once on mount, clean up on unmount ──
+  useEffect(() => {
+    // Connect to the same origin — Socket.io auto-detects the path
+    const socket = socketIO(window.location.origin, {
+      path: "/socket.io",
+      transports: ["websocket", "polling"], // try WebSocket first, fall back to polling
+    });
+
+    socketRef.current = socket;
+
+    // ── Connection lifecycle ──
+    socket.on("connect", () => {
+      console.log("🔌 Socket.io connected:", socket.id);
+      setIsConnected(true);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("❌ Socket.io disconnected");
+      setIsConnected(false);
+    });
+
+    // ── Real-time event: a new post was created by any user ──
+    socket.on("new_post", (newPost: Post) => {
+      setPosts((prev) => {
+        // Avoid duplicates (the author's own post is already added optimistically)
+        if (prev.some((p) => p.id === newPost.id)) return prev;
+        return [{ ...newPost, likedByMe: false, replies: newPost.replies.map((r) => ({ ...r, likedByMe: false })) }, ...prev];
+      });
+    });
+
+    // ── Real-time event: a post's like count changed ──
+    socket.on("post_liked", ({ id, likes }: { id: string; likes: number }) => {
+      setPosts((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, likes } : p))
+      );
+    });
+
+    // ── Real-time event: a post's view count changed ──
+    socket.on("post_viewed", ({ id, views }: { id: string; views: number }) => {
+      setPosts((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, views } : p))
+      );
+    });
+
+    // ── Real-time event: a new reply was added to a post ──
+    socket.on("new_reply", ({ postId, reply }: { postId: string; reply: Reply }) => {
+      setPosts((prev) =>
+        prev.map((p) => {
+          if (p.id !== postId) return p;
+          // Avoid duplicates
+          if (p.replies.some((r) => r.id === reply.id)) return p;
+          return { ...p, replies: [...p.replies, { ...reply, likedByMe: false }] };
+        })
+      );
+    });
+
+    // ── Real-time event: a reply's like count changed ──
+    socket.on("reply_liked", ({ postId, replyId, likes }: { postId: string; replyId: string; likes: number }) => {
+      setPosts((prev) =>
+        prev.map((p) => {
+          if (p.id !== postId) return p;
+          return {
+            ...p,
+            replies: p.replies.map((r) => (r.id === replyId ? { ...r, likes } : r)),
+          };
+        })
+      );
+    });
+
+    // Cleanup on unmount
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, []); // run once on mount
+
+  // ── Action handlers (REST calls — Socket.io propagates to other users) ──
 
   const handleLikePost = async (postId: string, alreadyLiked: boolean) => {
+    // Optimistic update for the current user
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? { ...p, likes: alreadyLiked ? p.likes - 1 : p.likes + 1, likedByMe: !alreadyLiked }
+          : p
+      )
+    );
     const endpoint = alreadyLiked ? "unlike" : "like";
     try {
-      const { likes } = await apiFetch<{ likes: number }>(`${API}/posts/${postId}/${endpoint}`, { method: "POST" });
-      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes, likedByMe: !alreadyLiked } : p));
-    } catch {}
+      await apiFetch<{ likes: number }>(`${API}/posts/${postId}/${endpoint}`, { method: "POST" });
+      // Server emits "post_liked" via Socket.io → other clients update automatically
+    } catch {
+      // Revert optimistic update on error
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, likes: alreadyLiked ? p.likes + 1 : p.likes - 1, likedByMe: alreadyLiked }
+            : p
+        )
+      );
+    }
   };
 
   const handleLikeReply = async (postId: string, replyId: string, alreadyLiked: boolean) => {
     if (alreadyLiked) return;
+    // Optimistic update for the current user
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id !== postId ? p : {
+          ...p,
+          replies: p.replies.map((r) =>
+            r.id === replyId ? { ...r, likes: r.likes + 1, likedByMe: true } : r
+          ),
+        }
+      )
+    );
     try {
-      const { likes } = await apiFetch<{ likes: number }>(`${API}/replies/${replyId}/like`, { method: "POST" });
-      setPosts((prev) => prev.map((p) =>
-        p.id === postId
-          ? { ...p, replies: p.replies.map((r) => r.id === replyId ? { ...r, likes, likedByMe: true } : r) }
-          : p
-      ));
-    } catch {}
+      await apiFetch<{ likes: number }>(`${API}/replies/${replyId}/like`, { method: "POST" });
+      // Server emits "reply_liked" via Socket.io → other clients update automatically
+    } catch {
+      // Revert optimistic update on error
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id !== postId ? p : {
+            ...p,
+            replies: p.replies.map((r) =>
+              r.id === replyId ? { ...r, likes: r.likes - 1, likedByMe: false } : r
+            ),
+          }
+        )
+      );
+    }
   };
 
   const handleAddReply = async (postId: string, content: string) => {
@@ -385,19 +507,36 @@ export default function Community() {
         method: "POST",
         body: JSON.stringify({ author: currentAuthor, avatar: "🐾", content }),
       });
-      setPosts((prev) => prev.map((p) =>
-        p.id === postId ? { ...p, replies: [...p.replies, { ...newReply, likedByMe: false }] } : p
-      ));
-    } catch {}
+
+      // immediately update local UI; Socket.io event may also arrive for other clients
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, replies: [...p.replies, { ...newReply, likedByMe: false }] }
+            : p
+        )
+      );
+    } catch (e) {
+      console.error("Failed to add reply", e);
+    }
   };
 
   const handleNewPost = async (data: CreatePostBody) => {
     try {
-      const newPost = await apiFetch<Post>(`${API}/posts`, {
+      const createdPost = await apiFetch<Post>(`${API}/posts`, {
         method: "POST",
         body: JSON.stringify({ ...data, author: currentAuthor }),
       });
-      setPosts((prev) => [{ ...newPost, likedByMe: false, replies: [] }, ...prev]);
+
+      setPosts((prev) => [
+        {
+          ...createdPost,
+          likedByMe: false,
+          replies: createdPost.replies.map((r) => ({ ...r, likedByMe: false })),
+        },
+        ...prev,
+      ]);
+
       setShowNewPost(false);
     } catch (e: any) {
       alert("Failed to create post: " + e.message);
@@ -407,9 +546,11 @@ export default function Community() {
   const handleIncrementViews = async (postId: string) => {
     try {
       await apiFetch(`${API}/posts/${postId}/view`, { method: "POST" });
-      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, views: p.views + 1 } : p));
+      // Server emits "post_viewed" via Socket.io → all clients update view count
     } catch {}
   };
+
+  // ── Filtering & sorting (client-side, no extra requests) ──
 
   const filteredPosts = posts
     .filter((p) => {
@@ -439,9 +580,26 @@ export default function Community() {
       <section className="bg-gradient-to-br from-orange-50 via-white to-amber-50 border-b border-gray-100 py-12 sm:py-16">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
-            <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-3">Community</h1>
+            <div className="flex items-center gap-3 mb-3">
+              <h1 className="text-4xl sm:text-5xl font-bold text-gray-900">Community</h1>
+              {/* Real-time connection indicator */}
+              <span
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border",
+                  isConnected
+                    ? "bg-green-50 text-green-600 border-green-200"
+                    : "bg-gray-100 text-gray-500 border-gray-200"
+                )}
+              >
+                {isConnected ? (
+                  <><Wifi className="w-3 h-3" /> Live</>
+                ) : (
+                  <><WifiOff className="w-3 h-3" /> Offline</>
+                )}
+              </span>
+            </div>
             <p className="text-lg text-gray-600 mb-8">
-              Connect with pet lovers across India. Share tips, celebrate stories, ask questions, and discover local events.
+              Connect with pet lovers. Posts, replies, likes and views update in real-time — no refresh needed.
             </p>
             <div className="flex flex-wrap items-end gap-6 text-sm">
               <div><span className="text-2xl font-bold text-orange-500">4,821</span><p className="text-gray-500">Members</p></div>
@@ -488,6 +646,25 @@ export default function Community() {
                     )}>{opt.icon}{opt.label}</button>
                 ))}
               </div>
+            </div>
+
+            {/* Live status card */}
+            <div className={cn(
+              "rounded-2xl p-4 border text-sm",
+              isConnected ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"
+            )}>
+              <div className="flex items-center gap-2 font-semibold mb-1">
+                {isConnected ? (
+                  <><Wifi className="w-4 h-4 text-green-500" /><span className="text-green-700">Connected — Live updates on</span></>
+                ) : (
+                  <><WifiOff className="w-4 h-4 text-gray-400" /><span className="text-gray-600">Connecting…</span></>
+                )}
+              </div>
+              <p className={cn("text-xs", isConnected ? "text-green-600" : "text-gray-500")}>
+                {isConnected
+                  ? "New posts, replies and likes appear instantly."
+                  : "Attempting to establish real-time connection."}
+              </p>
             </div>
           </aside>
 

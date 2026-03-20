@@ -94,6 +94,9 @@ export default function Dashboard() {
   const { signOut } = useClerk();
   const [activeTab, setActiveTab] = useState("overview");
   const [pets, setPets] = useState(mockPets);
+  const [likedPets, setLikedPets] = useState(mockLikedPets);
+  const [filterText, setFilterText] = useState("");
+  const [showOnlyVaccinated, setShowOnlyVaccinated] = useState(false);
 
   const firstName = user?.firstName ?? "Pet Lover";
   const lastName = user?.lastName ?? "";
@@ -101,6 +104,10 @@ export default function Dashboard() {
   const avatar = user?.imageUrl;
   const joinDate = user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-IN", { month: "long", year: "numeric" }) : "Recently";
   const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
+
+  const filteredPets = pets
+    .filter((pet) => !filterText || pet.name.toLowerCase().includes(filterText.toLowerCase()) || pet.breed.toLowerCase().includes(filterText.toLowerCase()))
+    .filter((pet) => !showOnlyVaccinated || pet.vaccinated);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -133,8 +140,8 @@ export default function Dashboard() {
 
               {/* Actions */}
               <div className="flex gap-2">
-                <Link to="/pet-profile" className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                  <Edit className="w-4 h-4" /> Edit Profile
+                <Link to="/dashboard" className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                  <Edit className="w-4 h-4" /> Profile
                 </Link>
                 <button onClick={() => signOut()} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-red-200 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors">
                   <LogOut className="w-4 h-4" /> Sign Out
@@ -207,7 +214,10 @@ export default function Dashboard() {
                   </button>
                 </div>
                 <div className="space-y-3">
-                  {pets.map((pet) => (
+                  {pets
+                    .filter((pet) => !filterText || pet.name.toLowerCase().includes(filterText.toLowerCase()) || pet.breed.toLowerCase().includes(filterText.toLowerCase()))
+                    .filter((pet) => !showOnlyVaccinated || pet.vaccinated)
+                    .map((pet) => (
                     <div key={pet.id} className="flex items-center gap-4 p-3 rounded-xl hover:bg-gray-50 transition-colors">
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-100 to-orange-200 flex items-center justify-center text-2xl">
                         {petEmoji(pet.type)}
@@ -287,27 +297,38 @@ export default function Dashboard() {
         {activeTab === "pets" && (
           <div>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-gray-900">My Pets ({pets.length})</h2>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">My Pets ({pets.length})</h2>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <input value={filterText} onChange={(e)=>setFilterText(e.target.value)}
+                    placeholder="Search pets..."
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-sm w-60 focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                  <label className="text-sm text-gray-500 inline-flex items-center gap-2">
+                    <input type="checkbox" checked={showOnlyVaccinated} onChange={(e)=>setShowOnlyVaccinated(e.target.checked)} className="form-checkbox" />
+                    Show vaccinated only
+                  </label>
+                </div>
+              </div>
               <Link
-                to="/pet-profile"
+                to="/dashboard"
                 className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition-colors shadow-sm"
               >
                 <Plus className="w-4 h-4" /> Add Pet
               </Link>
             </div>
 
-            {pets.length === 0 ? (
+            {filteredPets.length === 0 ? (
               <div className="bg-white rounded-2xl border-2 border-dashed border-orange-200 p-16 text-center">
                 <div className="text-6xl mb-4">🐾</div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No pets yet</h3>
-                <p className="text-gray-500 mb-6">Add your first pet to get started</p>
-                <Link to="/pet-profile" className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors">
+                <h3 className="text-xl font-bold text-gray-900 mb-2">No pets found</h3>
+                <p className="text-gray-500 mb-6">Try changing the search or filter, or add a new pet.</p>
+                <Link to="/dashboard" className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors">
                   <Plus className="w-4 h-4" /> Add Your First Pet
                 </Link>
               </div>
             ) : (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {pets.map((pet) => (
+                {filteredPets.map((pet) => (
                   <div key={pet.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                     <div className="bg-gradient-to-br from-orange-400 to-orange-600 h-40 flex items-center justify-center">
                       <span className="text-6xl">{petEmoji(pet.type)}</span>
@@ -328,7 +349,7 @@ export default function Dashboard() {
                       </div>
                       {pet.bio && <p className="text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2 mb-4">{pet.bio}</p>}
                       <div className="flex gap-2">
-                        <Link to="/pet-profile" className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                        <Link to="/dashboard" className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
                           <Edit className="w-3.5 h-3.5" /> Edit
                         </Link>
                         <button onClick={() => setPets(pets.filter(p => p.id !== pet.id))} className="flex items-center justify-center gap-1.5 px-3 py-2 border border-red-200 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 transition-colors">
@@ -346,9 +367,9 @@ export default function Dashboard() {
         {/* ===== LIKED PETS TAB ===== */}
         {activeTab === "liked" && (
           <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Liked Pets ({mockLikedPets.length})</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Liked Pets ({likedPets.length})</h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {mockLikedPets.map((pet) => (
+              {likedPets.map((pet) => (
                 <div key={pet.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                   <div className="bg-gradient-to-br from-red-50 to-orange-50 h-40 flex items-center justify-center relative">
                     <span className="text-6xl">{pet.image}</span>
@@ -364,9 +385,14 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-gray-400" />{pet.age} years old</div>
                       <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" />{pet.location}</div>
                     </div>
-                    <Link to="/breeding" className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition-colors">
-                      <Heart className="w-4 h-4" /> View Profile
-                    </Link>
+                    <div className="flex gap-2">
+                      <Link to="/breeding" className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition-colors">
+                        <Heart className="w-4 h-4" /> View Profile
+                      </Link>
+                      <button onClick={() => setLikedPets(prev => prev.filter(x => x.id !== pet.id))} className="text-sm text-red-500 border border-red-200 px-2 py-1 rounded-xl hover:bg-red-50 transition-colors">
+                        <Trash2 className="w-4 h-4" /> Remove
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
