@@ -534,6 +534,8 @@ export default function ChatPage() {
   const [isMuted,      setIsMuted]      = useState(false);
   const [isCameraOff,  setIsCameraOff]  = useState(false);
   const [callElapsed,  setCallElapsed]  = useState(0);
+  const [callError,    setCallError]    = useState<string | null>(null);
+  const ringtoneRef  = useRef<HTMLAudioElement | null>(null);
   const [showSidebar,  setShowSidebar]  = useState(true);
 
   // FIX: single setter that keeps ref in sync
@@ -586,7 +588,18 @@ export default function ChatPage() {
   }, []);
 
   const getPC = useCallback((): RTCPeerConnection => {
-    if (pcRef.current) return pcRef.current;
+    // Always create a fresh PC — never reuse one (it may be closing/closed)
+    if (pcRef.current) {
+      const state = pcRef.current.connectionState;
+      // Return existing only if it's genuinely usable
+      if (state !== "closed" && state !== "failed" && state !== "disconnected") {
+        return pcRef.current;
+      }
+      // Otherwise close and recreate
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+
     const pc = new RTCPeerConnection(ICE_SERVERS);
     pcRef.current = pc;
 
@@ -610,13 +623,19 @@ export default function ChatPage() {
         setTimeout(() => setCallInfo({ status: "idle" }), 2500);
       }
     };
-    if (localStreamRef.current) {
-      localStreamRef.current
-        .getTracks()
-        .forEach((t) => pc.addTrack(t, localStreamRef.current!));
-    }
+    // NOTE: Do NOT add tracks here — caller does it explicitly to avoid double-add
     return pc;
   }, [cleanupCall]);
+
+  // Safe addTrack — skips if a sender for this track already exists
+  const addTracksToPC = useCallback((pc: RTCPeerConnection, stream: MediaStream) => {
+    const existingTracks = new Set(pc.getSenders().map((s) => s.track?.id));
+    stream.getTracks().forEach((track) => {
+      if (!existingTracks.has(track.id)) {
+        pc.addTrack(track, stream);
+      }
+    });
+  }, []);
 
   const createAndSendOffer = useCallback(
     async (targetSocketId: string) => {
@@ -816,6 +835,8 @@ export default function ChatPage() {
           callType:     data.callType,
           remoteSocket: data.socketId,
         });
+        // Play incoming ringtone
+        startRingtoneRef.current();
       }
     );
 
@@ -826,6 +847,7 @@ export default function ChatPage() {
         callType:     "video" | "voice";
         socketId:     string;
       }) => {
+        stopRingtoneRef.current();
         remoteSocketRef.current = data.socketId;
         setCallInfo((prev) => ({
           ...prev,
@@ -838,12 +860,14 @@ export default function ChatPage() {
     );
 
     socket.on("call_rejected", () => {
+      stopRingtoneRef.current();
       setCallInfo({ status: "ended" });
       setTimeout(() => setCallInfo({ status: "idle" }), 2500);
       cleanupCall();
     });
 
     socket.on("call_ended", () => {
+      stopRingtoneRef.current();
       setCallInfo({ status: "ended" });
       setTimeout(() => setCallInfo({ status: "idle" }), 2000);
       cleanupCall();
@@ -858,6 +882,10 @@ export default function ChatPage() {
       }) => {
         remoteSocketRef.current = data.fromSocketId;
         const pc = getPC();
+        // Re-add local tracks if PC was recreated and stream exists
+        if (localStreamRef.current) {
+          addTracksToPC(pc, localStreamRef.current);
+        }
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
         for (const c of icePendingRef.current)
           await pc.addIceCandidate(new RTCIceCandidate(c));
@@ -1030,19 +1058,74 @@ export default function ChatPage() {
 
   /* ── Call helpers ────────────────────────────────────────────────────────── */
   async function acquireMedia(video: boolean): Promise<MediaStream> {
-    return navigator.mediaDevices.getUserMedia({ video, audio: true });
+    try {
+      return await navigator.mediaDevices.getUserMedia({ video, audio: true });
+    } catch (err: any) {
+      const name = err?.name ?? "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        throw new Error("Microphone permission denied. Please allow access in your browser settings.");
+      } else if (name === "NotFoundError") {
+        throw new Error("No microphone found. Please connect a microphone and try again.");
+      } else if (name === "NotReadableError") {
+        throw new Error("Microphone is in use by another application.");
+      }
+      throw new Error("Could not access microphone. Please check browser permissions.");
+    }
   }
+
+  // Use refs so ringtone functions are accessible inside socket callbacks
+  const startRingtoneRef = useRef<() => void>(() => {});
+  const stopRingtoneRef  = useRef<() => void>(() => {});
+
+  const startRingtone = useCallback(() => {
+    // Simple ringtone using Web Audio API — no external file needed
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const playBeep = (startTime: number) => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(480, startTime);
+        osc.frequency.setValueAtTime(420, startTime + 0.4);
+        gain.gain.setValueAtTime(0.3, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.8);
+        osc.start(startTime);
+        osc.stop(startTime + 0.8);
+      };
+      // Play 3 rings, 1.5s apart
+      for (let i = 0; i < 3; i++) playBeep(ctx.currentTime + i * 1.5);
+      // Store context so we can close it when call ends
+      (ringtoneRef as any).current = ctx;
+    } catch {}
+  }, []);
+
+  const stopRingtone = useCallback(() => {
+    try {
+      (ringtoneRef as any).current?.close();
+      (ringtoneRef as any).current = null;
+    } catch {}
+  }, []);
+
+  // Keep refs in sync so socket callbacks can call them
+  useEffect(() => { startRingtoneRef.current = startRingtone; }, [startRingtone]);
+  useEffect(() => { stopRingtoneRef.current  = stopRingtone;  }, [stopRingtone]);
 
   const startCall = useCallback(
     async (type: "video" | "voice") => {
       if (!activeRoomIdRef.current) return;
+      setCallError(null);
       try {
+        // Always start with a fresh PC for a new outgoing call
+        cleanupCall();
         const stream = await acquireMedia(type === "video");
         localStreamRef.current = stream;
         setLocalStream(stream);
         const pc = getPC();
-        stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+        addTracksToPC(pc, stream);
         setCallInfo({ status: type === "voice" ? "voice_calling" : "calling", callType: type });
+        startRingtone();
         socketRef.current?.emit("call_initiate", {
           roomId:       activeRoomIdRef.current,
           callerId:     myIdRef.current,
@@ -1050,23 +1133,23 @@ export default function ChatPage() {
           callerAvatar: myAvatarRef.current,
           callType:     type,
         });
-      } catch {
-        alert(
-          `Could not access ${type === "video" ? "camera/" : ""}microphone. Please check browser permissions.`
-        );
+      } catch (err: any) {
+        setCallError(err?.message ?? "Could not start call. Check microphone permissions.");
+        cleanupCall();
       }
     },
-    [getPC]
+    [getPC, addTracksToPC, startRingtone, cleanupCall]
   );
 
   const acceptCall = useCallback(
     async (type: "video" | "voice") => {
+      stopRingtone();
       try {
         const stream = await acquireMedia(type === "video");
         localStreamRef.current = stream;
         setLocalStream(stream);
         const pc = getPC();
-        stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+        addTracksToPC(pc, stream);
         setCallInfo((prev) => ({
           ...prev,
           status:   type === "voice" ? "voice_connected" : "connected",
@@ -1078,7 +1161,8 @@ export default function ChatPage() {
           answererName: myNameRef.current,
           callType:     type,
         });
-      } catch {
+      } catch (err: any) {
+        setCallError(err?.message ?? "Could not access microphone for this call.");
         socketRef.current?.emit("call_rejected", {
           roomId: activeRoomIdRef.current,
           reason: "Permission denied",
@@ -1086,23 +1170,25 @@ export default function ChatPage() {
         setCallInfo({ status: "idle" });
       }
     },
-    [callInfo.callerId, getPC]
+    [callInfo.callerId, getPC, addTracksToPC, stopRingtone]
   );
 
   const rejectCall = useCallback(() => {
+    stopRingtone();
     socketRef.current?.emit("call_rejected", {
       roomId: activeRoomIdRef.current,
     });
     setCallInfo({ status: "idle" });
-  }, []);
+  }, [stopRingtone]);
 
   const endCall = useCallback(() => {
+    stopRingtone();
     socketRef.current?.emit("call_ended", {
       roomId: activeRoomIdRef.current,
     });
     cleanupCall();
     setCallInfo({ status: "idle" });
-  }, [cleanupCall]);
+  }, [cleanupCall, stopRingtone]);
 
   const toggleMute = useCallback(() => {
     const t = localStreamRef.current?.getAudioTracks()[0];
@@ -1711,6 +1797,13 @@ export default function ChatPage() {
                         </span>
                       )}
                     </div>
+                    {/* Inline call error — replaces the jarring alert() */}
+                    {callError && (
+                      <div className="mt-2 flex items-center justify-between gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 font-medium">
+                        <span>⚠️ {callError}</span>
+                        <button onClick={() => setCallError(null)} className="text-red-400 hover:text-red-600 flex-shrink-0">✕</button>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
