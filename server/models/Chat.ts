@@ -1,4 +1,4 @@
-﻿import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document } from "mongoose";
 
 export interface ChatMessage {
   id: string;
@@ -25,18 +25,20 @@ export interface IChatRoom extends Document {
   createdAt: string;
 }
 
+// FIX: id field is not required in sub-schema because old messages may use _id only.
+// We normalize at read time in chat.ts.
 const ChatMessageSchema = new Schema<ChatMessage>(
   {
-    id: { type: String, required: true },
-    roomId: { type: String, required: true },
+    id: { type: String, default: "" },          // FIX: not required, has default
+    roomId: { type: String, default: "" },      // FIX: not required, has default
     senderId: { type: String, required: true },
     senderName: { type: String, required: true },
-    senderAvatar: { type: String, required: true },
+    senderAvatar: { type: String, default: "🐾" },
     text: { type: String, required: true },
     timestamp: { type: String, required: true },
     type: { type: String, enum: ["text", "system"], default: "text" },
   },
-  { _id: false }
+  { _id: true }   // FIX: keep _id so we can fall back to it as message id
 );
 
 const ChatRoomSchema = new Schema<IChatRoom>(
@@ -49,11 +51,19 @@ const ChatRoomSchema = new Schema<IChatRoom>(
     ownerName: { type: String, required: true },
     seekerId: { type: String, required: true },
     seekerName: { type: String, required: true },
-    seekerAvatar: { type: String, required: true },
+    seekerAvatar: { type: String, default: "🐾" },
     messages: { type: [ChatMessageSchema], default: [] },
     createdAt: { type: String, required: true },
   },
   { timestamps: false }
 );
 
-export const ChatRoom = mongoose.models.ChatRoom as mongoose.Model<IChatRoom> || mongoose.model<IChatRoom>("ChatRoom", ChatRoomSchema);
+// FIX: add indexes for fast lookup by ownerId, ownerName, and seekerId
+ChatRoomSchema.index({ ownerId: 1 });
+ChatRoomSchema.index({ ownerName: 1 });
+ChatRoomSchema.index({ seekerId: 1 });
+ChatRoomSchema.index({ id: 1 }, { unique: true });
+
+export const ChatRoom =
+  (mongoose.models.ChatRoom as mongoose.Model<IChatRoom>) ||
+  mongoose.model<IChatRoom>("ChatRoom", ChatRoomSchema);

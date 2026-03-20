@@ -29,6 +29,7 @@ interface UseChatOptions {
 interface JoinRoomOptions {
   petId: string;
   petName: string;
+  petPhoto?: string;   // FIX: added petPhoto
   ownerId: string;
   ownerName: string;
   seekerId: string;
@@ -50,6 +51,9 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
   const remoteSocketIdRef = useRef<string | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
+  // FIX: use a ref for currentRoomId so all socket callbacks see the latest value
+  const currentRoomIdRef = useRef<string | null>(null);
+
   const [isConnected, setIsConnected] = useState(false);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -60,6 +64,12 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
 
+  // Keep ref in sync with state
+  const setRoom = useCallback((id: string | null) => {
+    currentRoomIdRef.current = id;
+    setCurrentRoomId(id);
+  }, []);
+
   // ── Socket Init ────────────────────────────────────────────────────────────
   useEffect(() => {
     const socket = io("/chat", {
@@ -68,30 +78,60 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
 
     socketRef.current = socket;
 
+    // Keep user info in refs so socket callbacks always have fresh values
+    const userIdRef   = { current: userId };
+    const userNameRef = { current: userName };
+
+    const doSubscribe = () => {
+      const id   = userIdRef.current;
+      const name = userNameRef.current;
+      if (!id || !socket.connected) return;
+      socket.emit("seeker_subscribe", { seekerId: id, seekerName: name });
+    };
+
     socket.on("connect", () => {
       setIsConnected(true);
-      socket.emit("seeker_subscribe", { seekerId: userId, seekerName: userName });
+      doSubscribe();
     });
     socket.on("disconnect", () => setIsConnected(false));
+    (socket as any)._doSubscribe = doSubscribe;
 
     socket.on(
       "room_joined",
       (data: { roomId: string; messages: ChatMessage[] }) => {
-        setCurrentRoomId(data.roomId);
+        setRoom(data.roomId);
         setMessages(data.messages);
       }
     );
 
     socket.on("new_message", (msg: ChatMessage) => {
+      if (msg.roomId !== currentRoomIdRef.current) return;
       setMessages((prev) => {
+        // Already exists — skip
         if (prev.some((m) => m.id === msg.id)) return prev;
+        // Replace matching optimistic message
+        const optIdx = prev.findIndex(
+          (m) =>
+            m.id.startsWith("opt_") &&
+            m.senderId === msg.senderId &&
+            m.text === msg.text &&
+            Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10000
+        );
+        if (optIdx !== -1) {
+          const next = [...prev];
+          next[optIdx] = msg;
+          return next;
+        }
         return [...prev, msg];
       });
     });
 
-    socket.on("user_typing", ({ userName: name }: { userName: string }) => {
-      setTypingUser(name);
-    });
+    socket.on(
+      "user_typing",
+      ({ userName: name }: { userName: string }) => {
+        setTypingUser(name);
+      }
+    );
 
     socket.on("user_stopped_typing", () => setTypingUser(null));
 
@@ -125,7 +165,6 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
           status: "connected",
           remoteSocketId: data.socketId,
         }));
-        // Caller creates and sends the offer
         await createOffer(data.socketId);
       }
     );
@@ -145,12 +184,14 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
     // ── WebRTC Signaling ──
     socket.on(
       "webrtc_offer",
-      async (data: { offer: RTCSessionDescriptionInit; fromSocketId: string }) => {
+      async (data: {
+        offer: RTCSessionDescriptionInit;
+        fromSocketId: string;
+      }) => {
         remoteSocketIdRef.current = data.fromSocketId;
         const pc = getPeerConnection();
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
 
-        // Flush pending ICE candidates
         for (const c of pendingCandidatesRef.current) {
           await pc.addIceCandidate(new RTCIceCandidate(c));
         }
@@ -160,7 +201,7 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
         await pc.setLocalDescription(answer);
 
         socket.emit("webrtc_answer", {
-          roomId: currentRoomId,
+          roomId: currentRoomIdRef.current,
           answer,
           targetSocketId: data.fromSocketId,
         });
@@ -192,7 +233,8 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
       socket.disconnect();
       cleanupCall();
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // only on mount — callbacks read from refs
 
   // ── PeerConnection factory ─────────────────────────────────────────────────
   function getPeerConnection(): RTCPeerConnection {
@@ -202,9 +244,13 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
     pcRef.current = pc;
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && remoteSocketIdRef.current && socketRef.current) {
+      if (
+        event.candidate &&
+        remoteSocketIdRef.current &&
+        socketRef.current
+      ) {
         socketRef.current.emit("webrtc_ice_candidate", {
-          roomId: currentRoomId,
+          roomId: currentRoomIdRef.current,
           candidate: event.candidate.toJSON(),
           targetSocketId: remoteSocketIdRef.current,
         });
@@ -227,11 +273,10 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
       }
     };
 
-    // Add local tracks if stream is already active
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => {
-        pc.addTrack(track, localStreamRef.current!);
-      });
+      localStreamRef.current
+        .getTracks()
+        .forEach((track) => pc.addTrack(track, localStreamRef.current!));
     }
 
     return pc;
@@ -242,7 +287,7 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socketRef.current?.emit("webrtc_offer", {
-      roomId: currentRoomId,
+      roomId: currentRoomIdRef.current,
       offer,
       targetSocketId,
     });
@@ -269,6 +314,8 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
     (opts: JoinRoomOptions) => {
       socketRef.current?.emit("join_room", {
         ...opts,
+        // FIX: always pass petPhoto and seekerAvatar
+        petPhoto: opts.petPhoto ?? "",
         seekerAvatar: userAvatar,
       });
     },
@@ -277,30 +324,54 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
 
   const sendMessage = useCallback(
     (text: string) => {
-      if (!currentRoomId || !text.trim()) return;
-      socketRef.current?.emit("send_message", {
-        roomId: currentRoomId,
-        senderId: userId,
-        senderName: userName,
+      const roomId = currentRoomIdRef.current;
+      const socket = socketRef.current;
+      if (!text.trim() || !socket) return;
+      // Use a fallback if roomId not yet set (join_room may not have completed)
+      const targetRoom = roomId || "";
+      if (!targetRoom) {
+        console.warn("[useChat] sendMessage: no active room yet");
+        return;
+      }
+
+      // Optimistic UI: show message immediately
+      const optimisticMsg = {
+        id:           `opt_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+        roomId:       targetRoom,
+        senderId:     userId,
+        senderName:   userName,
         senderAvatar: userAvatar,
-        text: text.trim(),
+        text:         text.trim(),
+        timestamp:    new Date().toISOString(),
+        type:         "text" as const,
+      };
+      setMessages((prev) => [...prev, optimisticMsg]);
+
+      socket.emit("send_message", {
+        roomId:       targetRoom,
+        senderId:     userId,
+        senderName:   userName,
+        senderAvatar: userAvatar,
+        text:         text.trim(),
       });
     },
-    [currentRoomId, userId, userName, userAvatar]
+    [userId, userName, userAvatar]
   );
 
   const sendTypingStart = useCallback(() => {
-    if (!currentRoomId) return;
+    if (!currentRoomIdRef.current) return;
     socketRef.current?.emit("typing_start", {
-      roomId: currentRoomId,
+      roomId: currentRoomIdRef.current,
       userName,
     });
-  }, [currentRoomId, userName]);
+  }, [userName]);
 
   const sendTypingStop = useCallback(() => {
-    if (!currentRoomId) return;
-    socketRef.current?.emit("typing_stop", { roomId: currentRoomId });
-  }, [currentRoomId]);
+    if (!currentRoomIdRef.current) return;
+    socketRef.current?.emit("typing_stop", {
+      roomId: currentRoomIdRef.current,
+    });
+  }, []);
 
   const startCall = useCallback(async () => {
     try {
@@ -311,65 +382,67 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
       localStreamRef.current = stream;
       setLocalStream(stream);
 
-      // Add tracks to peer connection
       const pc = getPeerConnection();
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       setCallState({ status: "calling" });
       socketRef.current?.emit("call_initiate", {
-        roomId: currentRoomId,
+        roomId: currentRoomIdRef.current,
         callerId: userId,
         callerName: userName,
         callerAvatar: userAvatar,
       });
     } catch (err) {
       console.error("Failed to get media:", err);
-      alert(
-        "Could not access camera/microphone. Please check permissions."
-      );
+      alert("Could not access camera/microphone. Please check permissions.");
     }
-  }, [currentRoomId, userId, userName, userAvatar]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, userName, userAvatar]);
 
-  const acceptCall = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-      localStreamRef.current = stream;
-      setLocalStream(stream);
+  const acceptCall = useCallback(
+    async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+        localStreamRef.current = stream;
+        setLocalStream(stream);
 
-      const pc = getPeerConnection();
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        const pc = getPeerConnection();
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      setCallState((prev) => ({ ...prev, status: "connected" }));
-      socketRef.current?.emit("call_accepted", {
-        roomId: currentRoomId,
-        callerId: callState.callerId,
-        answererName: userName,
-      });
-    } catch (err) {
-      console.error("Failed to get media:", err);
-      rejectCall("Camera/microphone access denied");
-    }
-  }, [currentRoomId, callState.callerId, userName]);
-
-  const rejectCall = useCallback(
-    (reason?: string) => {
-      socketRef.current?.emit("call_rejected", {
-        roomId: currentRoomId,
-        reason,
-      });
-      setCallState({ status: "idle" });
+        setCallState((prev) => ({ ...prev, status: "connected" }));
+        socketRef.current?.emit("call_accepted", {
+          roomId: currentRoomIdRef.current,
+          callerId: callState.callerId,
+          answererName: userName,
+        });
+      } catch (err) {
+        console.error("Failed to get media:", err);
+        rejectCall("Camera/microphone access denied");
+      }
     },
-    [currentRoomId]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [callState.callerId, userName]
   );
 
+  const rejectCall = useCallback((reason?: string) => {
+    socketRef.current?.emit("call_rejected", {
+      roomId: currentRoomIdRef.current,
+      reason,
+    });
+    setCallState({ status: "idle" });
+  }, []);
+
   const endCall = useCallback(() => {
-    socketRef.current?.emit("call_ended", { roomId: currentRoomId });
+    socketRef.current?.emit("call_ended", {
+      roomId: currentRoomIdRef.current,
+    });
     cleanupCall();
     setCallState({ status: "idle" });
-  }, [currentRoomId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const toggleMute = useCallback(() => {
     if (localStreamRef.current) {

@@ -39,6 +39,14 @@ export function useOwnerInbox({
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [totalUnread, setTotalUnread] = useState(0);
 
+  // FIX: use a ref so socket callbacks always see the current activeRoomId
+  const activeRoomIdRef = useRef<string | null>(null);
+  // Keep ref in sync with state
+  const handleSetActiveRoomId = useCallback((id: string | null) => {
+    activeRoomIdRef.current = id;
+    setActiveRoomId(id);
+  }, []);
+
   // Recompute totalUnread whenever rooms change
   useEffect(() => {
     setTotalUnread(rooms.reduce((sum, r) => sum + r.unreadCount, 0));
@@ -55,19 +63,20 @@ export function useOwnerInbox({
 
     socket.on("connect", () => {
       setIsConnected(true);
-      // Subscribe to owner inbox immediately on connect
       socket.emit("owner_subscribe", { ownerId, ownerName });
     });
 
     socket.on("disconnect", () => setIsConnected(false));
 
-    // Full inbox snapshot on first connect
+    // Full inbox snapshot on connect — restore all rooms with their messages
     socket.on(
       "owner_inbox",
       (data: { rooms: Omit<InboxRoom, "unreadCount" | "isOpen">[] }) => {
         setRooms(
           data.rooms.map((r) => ({
             ...r,
+            // FIX: unreadCount starts at 0 on connect (historical messages
+            // are already "seen" from the owner's perspective on page load)
             unreadCount: 0,
             isOpen: false,
           }))
@@ -81,15 +90,13 @@ export function useOwnerInbox({
       (data: { room: Omit<InboxRoom, "unreadCount" | "isOpen"> }) => {
         setRooms((prev) => {
           if (prev.some((r) => r.id === data.room.id)) return prev;
-          return [
-            { ...data.room, unreadCount: 0, isOpen: false },
-            ...prev,
-          ];
+          return [{ ...data.room, unreadCount: 1, isOpen: false }, ...prev];
         });
       }
     );
 
-    // A new message arrived in one of the owner's rooms
+    // inbox_message: update room preview only — new_message owns unread count.
+    // This avoids double-incrementing unread when both events fire for the same message.
     socket.on(
       "inbox_message",
       (data: {
@@ -104,42 +111,37 @@ export function useOwnerInbox({
             const alreadyExists = room.messages.some(
               (m) => m.id === data.message.id
             );
+            // Only append to preview — DO NOT touch unreadCount here
             return {
               ...room,
               messages: alreadyExists
                 ? room.messages
                 : [...room.messages, data.message],
-              // Only increment unread if this room is not currently open
-              unreadCount:
-                activeRoomId === data.roomId
-                  ? 0
-                  : room.unreadCount + 1,
             };
           })
         );
       }
     );
 
-    // Direct room messages (when owner has actively joined a room)
+    // new_message: real-time delivery — this is the single source for unread count.
     socket.on("new_message", (msg: ChatMessage) => {
       setRooms((prev) =>
         prev.map((room) => {
           if (room.id !== msg.roomId) return room;
+          // De-duplicate by message id
           if (room.messages.some((m) => m.id === msg.id)) return room;
           return {
             ...room,
             messages: [...room.messages, msg],
+            // Only increment unread if this room is NOT currently open
+            unreadCount:
+              activeRoomIdRef.current === msg.roomId
+                ? 0
+                : room.unreadCount + 1,
           };
         })
       );
     });
-
-    // Seeker typing
-    socket.on("user_typing", ({ userName }: { userName: string }) => {
-      // Handled at component level via activeRoomId
-    });
-
-    socket.on("user_stopped_typing", () => {});
 
     return () => {
       socket.disconnect();
@@ -149,23 +151,31 @@ export function useOwnerInbox({
   // ── Open a conversation ───────────────────────────────────────────────────
   const openRoom = useCallback(
     (roomId: string) => {
-      setActiveRoomId(roomId);
+      handleSetActiveRoomId(roomId);
 
       // Clear unread for this room
       setRooms((prev) =>
-        prev.map((r) => (r.id === roomId ? { ...r, unreadCount: 0, isOpen: true } : { ...r, isOpen: false }))
+        prev.map((r) =>
+          r.id === roomId
+            ? { ...r, unreadCount: 0, isOpen: true }
+            : { ...r, isOpen: false }
+        )
       );
 
       // Join the socket room so we receive real-time messages
-      socketRef.current?.emit("owner_join_room", { roomId, ownerId, ownerName });
+      socketRef.current?.emit("owner_join_room", {
+        roomId,
+        ownerId,
+        ownerName,
+      });
     },
-    [ownerId, ownerName]
+    [ownerId, ownerName, handleSetActiveRoomId]
   );
 
   const closeRoom = useCallback(() => {
-    setActiveRoomId(null);
+    handleSetActiveRoomId(null);
     setRooms((prev) => prev.map((r) => ({ ...r, isOpen: false })));
-  }, []);
+  }, [handleSetActiveRoomId]);
 
   // ── Send a reply ──────────────────────────────────────────────────────────
   const sendMessage = useCallback(

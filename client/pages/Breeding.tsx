@@ -8,8 +8,7 @@ import {
   Send, Phone, Video, Sparkles, Award, Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-// ── CHANGE 1: import PetChat ──────────────────────────────────────────────────
-import PetChat, { ChatTarget } from "@/components/PetChat";
+import { Link, useNavigate } from "react-router-dom";
 
 /* ─── Injected styles ──────────────────────────────────────────────────────── */
 const STYLES = `
@@ -190,7 +189,7 @@ function SwipeCard({ pet, isTop, swipeDir, onLike, onPass, onSave, isSaved }: {
   );
 }
 
-/* ─── Legacy internal ChatPanel (kept for backward compat) ────────────────── */
+/* ─── Legacy internal ChatPanel ────────────────────────────────────────────── */
 function ChatPanel({ pet, match, onSend, onClose }:{ pet:Pet; match:Match; onSend:(t:string)=>void; onClose:()=>void; }) {
   const [text, setText] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
@@ -239,10 +238,8 @@ export default function Breeding() {
   const [activeChat, setActiveChat] = useState<string|number|null>(null);
   const [feedback, setFeedback] = useState<"like"|"pass"|"save"|null>(null);
 
-  // ── CHANGE 2: state for the floating PetChat widget ───────────────────────
-  const [activeChatTarget, setActiveChatTarget] = useState<ChatTarget | null>(null);
-
   const { user } = useUser();
+  const navigate = useNavigate();
   const currentOwner = user?.firstName || user?.fullName || "You";
   const ownerAvatar = user?.imageUrl ?? "";
 
@@ -307,7 +304,7 @@ export default function Breeding() {
   const next = filteredDeck[1];
   const flash = (t:"like"|"pass"|"save") => { setFeedback(t); setTimeout(()=>setFeedback(null),750); };
 
-  // ── CHANGE 3: doLike — automatically opens PetChat when user likes a pet ──
+  // doLike — just adds to matches, no chat widget opened
   const doLike = useCallback(()=>{
     if(!current) return;
     setSwipeDir("right");
@@ -318,16 +315,6 @@ export default function Breeding() {
       setSwipeDir(null);
     },420);
     flash("like");
-
-    // Open the real-time PetChat widget with this pet's owner
-    setActiveChatTarget({
-      petId:      String(current.id),
-      petName:    current.name,
-      petPhoto:   current.photo,
-      ownerId:    current.ownerId ?? current.owner,
-      ownerName:  current.owner,
-      ownerAvatar: current.ownerAvatar,
-    });
   },[current]);
 
   const doPass = useCallback(()=>{
@@ -369,7 +356,6 @@ export default function Breeding() {
     setLiked(prev=>prev.filter(id=>id!==petId));
     setSaved(prev=>prev.filter(id=>id!==petId));
     if(activeChat===petId) setActiveChat(null);
-    if(activeChatTarget?.petId===String(petId)) setActiveChatTarget(null);
   };
 
   const submitMyPet = async(e:React.FormEvent)=>{
@@ -587,7 +573,7 @@ export default function Breeding() {
                 <div className="flex flex-col items-center">
                   {feedback&&(
                     <div className={cn("fixed top-24 left-1/2 -translate-x-1/2 z-50 px-7 py-3 rounded-2xl font-black text-white text-lg shadow-2xl bf-pop pointer-events-none",feedback==="like"?"bg-emerald-500":feedback==="pass"?"bg-red-500":"bg-yellow-500")}>
-                      {feedback==="like"?"💚 Liked! Chat opened →":feedback==="pass"?"✕ Passed":"🔖 Saved!"}
+                      {feedback==="like"?"💚 Liked!":feedback==="pass"?"✕ Passed":"🔖 Saved!"}
                     </div>
                   )}
                   {filteredDeck.length===0?(
@@ -620,7 +606,7 @@ export default function Breeding() {
                           <button onClick={doSave} className="w-14 h-14 rounded-full bg-white border-2 border-sky-200 text-sky-400 flex items-center justify-center shadow-md hover:shadow-lg hover:scale-110 hover:border-sky-400 transition-all"><Star className="w-5 h-5 fill-current"/></button>
                           <button onClick={()=>setDeck(allPets.filter(p=>!liked.includes(p.id)))} className="w-14 h-14 rounded-full bg-white border-2 border-gray-200 text-gray-400 flex items-center justify-center shadow-md hover:shadow-lg hover:scale-110 hover:border-gray-400 transition-all"><RefreshCw className="w-5 h-5"/></button>
                         </div>
-                        <p className="text-center text-xs text-gray-300 mt-4 font-medium">← Pass · 💚 Like (opens chat) · 🔖 Save · Drag to swipe</p>
+                        <p className="text-center text-xs text-gray-300 mt-4 font-medium">← Pass · 💚 Like · 🔖 Save · Drag to swipe</p>
                       </div>
                     </>
                   )}
@@ -643,57 +629,53 @@ export default function Breeding() {
                     </div>
                   ):(
                     <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
-                      {likedPets.map((pet,i)=>{
-                        const isChatOpen = activeChatTarget?.petId===String(pet.id);
-                        return (
-                          <div key={pet.id} className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all group bf-up" style={{animationDelay:`${i*55}ms`}}>
-                            <div className="relative h-48 overflow-hidden">
-                              <PetPhoto pet={pet} className="w-full h-full group-hover:scale-105 transition-transform duration-500"/>
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none"/>
-                              <button onClick={()=>removeMatch(pet.id)} className="absolute top-3 right-3 z-20 w-6 h-6 rounded-full bg-white/90 text-gray-500 hover:text-red-500 hover:bg-red-100 flex items-center justify-center shadow transition-all"><X className="w-3.5 h-3.5"/></button>
-                              <div className={cn("absolute top-3 left-3 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold shadow",pet.species==="cat"?"bg-purple-500/90 text-white backdrop-blur-sm":"bg-orange-500/90 text-white backdrop-blur-sm")}>{pet.species==="cat"?"🐱":"🐕"} {pet.species==="cat"?"Cat":"Dog"}</div>
-                              <div className={cn("absolute top-3 right-3 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border backdrop-blur-sm bg-white/80",scoreStyle(pet.score))}><Award className="w-3 h-3"/>{pet.score}%</div>
-                              {pet.pedigree&&<div className="absolute bottom-3 left-3 bg-yellow-400/90 text-yellow-900 px-2.5 py-1 rounded-full text-xs font-bold shadow flex items-center gap-1 backdrop-blur-sm"><Trophy className="w-3 h-3"/> Pedigree</div>}
-                            </div>
-                            <div className="p-5">
-                              <div className="flex items-start justify-between mb-1.5">
-                                <div><h3 className="bf-display font-black text-xl text-gray-900 leading-none">{pet.name}</h3><p className={cn("font-semibold text-sm mt-0.5",pet.species==="cat"?"text-purple-500":"text-orange-500")}>{pet.breed}</p></div>
-                                <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-full">{pet.age}yr · {pet.gender}</span>
-                              </div>
-                              <div className="space-y-1 text-xs text-gray-400 mb-3">
-                                <div className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-orange-400"/>{pet.location}</div>
-                                <div className="flex items-center gap-2">
-                                  {pet.ownerAvatar?.startsWith("http")?<img src={pet.ownerAvatar} alt={pet.owner} className="w-5 h-5 rounded-full object-cover"/>:<span className="text-base">{pet.ownerAvatar}</span>}
-                                  <span className="font-semibold text-gray-600">{pet.owner}</span>
-                                  {pet.ownerVerified&&<span className="bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded-full text-[10px] font-bold">✓ Verified</span>}
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap gap-1 mb-3">{pet.traits.slice(0,3).map(t=><span key={t} className={cn("px-2 py-0.5 rounded-full text-xs font-semibold",pet.species==="cat"?"bg-purple-50 text-purple-600":"bg-orange-50 text-orange-600")}>{t}</span>)}</div>
-                              {pet.healthCerts.length>0&&<div className="flex flex-wrap gap-1 mb-4">{pet.healthCerts.slice(0,2).map(c=><span key={c} className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full text-[10px] font-medium border border-emerald-100">✓ {c}</span>)}</div>}
-
-                              {/* ── CHANGE 4: Message button opens the real PetChat widget ── */}
-                              <button
-                                onClick={()=>setActiveChatTarget({
-                                  petId:     String(pet.id),
-                                  petName:   pet.name,
-                                  petPhoto:  pet.photo,
-                                  ownerId:   pet.ownerId ?? pet.owner,
-                                  ownerName: pet.owner,
-                                  ownerAvatar: pet.ownerAvatar,
-                                })}
-                                className={cn("w-full font-bold py-2.5 rounded-2xl text-sm flex items-center justify-center gap-2 transition-all shadow-sm",
-                                  isChatOpen
-                                    ? "bg-emerald-500 text-white shadow-emerald-200"
-                                    : "bg-gradient-to-r from-orange-500 to-amber-400 text-white hover:from-orange-600 hover:to-amber-500 shadow-orange-200"
-                                )}
-                              >
-                                <MessageSquare className="w-4 h-4"/>
-                                {isChatOpen ? "Chat Open ✓" : `Message ${pet.owner}`}
-                              </button>
-                            </div>
+                      {likedPets.map((pet,i)=>(
+                        <div key={pet.id} className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all group bf-up" style={{animationDelay:`${i*55}ms`}}>
+                          <div className="relative h-48 overflow-hidden">
+                            <PetPhoto pet={pet} className="w-full h-full group-hover:scale-105 transition-transform duration-500"/>
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none"/>
+                            <button onClick={()=>removeMatch(pet.id)} className="absolute top-3 right-3 z-20 w-6 h-6 rounded-full bg-white/90 text-gray-500 hover:text-red-500 hover:bg-red-100 flex items-center justify-center shadow transition-all"><X className="w-3.5 h-3.5"/></button>
+                            <div className={cn("absolute top-3 left-3 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold shadow",pet.species==="cat"?"bg-purple-500/90 text-white backdrop-blur-sm":"bg-orange-500/90 text-white backdrop-blur-sm")}>{pet.species==="cat"?"🐱":"🐕"} {pet.species==="cat"?"Cat":"Dog"}</div>
+                            <div className={cn("absolute top-3 right-3 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border backdrop-blur-sm bg-white/80",scoreStyle(pet.score))}><Award className="w-3 h-3"/>{pet.score}%</div>
+                            {pet.pedigree&&<div className="absolute bottom-3 left-3 bg-yellow-400/90 text-yellow-900 px-2.5 py-1 rounded-full text-xs font-bold shadow flex items-center gap-1 backdrop-blur-sm"><Trophy className="w-3 h-3"/> Pedigree</div>}
                           </div>
-                        );
-                      })}
+                          <div className="p-5">
+                            <div className="flex items-start justify-between mb-1.5">
+                              <div><h3 className="bf-display font-black text-xl text-gray-900 leading-none">{pet.name}</h3><p className={cn("font-semibold text-sm mt-0.5",pet.species==="cat"?"text-purple-500":"text-orange-500")}>{pet.breed}</p></div>
+                              <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-full">{pet.age}yr · {pet.gender}</span>
+                            </div>
+                            <div className="space-y-1 text-xs text-gray-400 mb-3">
+                              <div className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-orange-400"/>{pet.location}</div>
+                              <div className="flex items-center gap-2">
+                                {pet.ownerAvatar?.startsWith("http")?<img src={pet.ownerAvatar} alt={pet.owner} className="w-5 h-5 rounded-full object-cover"/>:<span className="text-base">{pet.ownerAvatar}</span>}
+                                <span className="font-semibold text-gray-600">{pet.owner}</span>
+                                {pet.ownerVerified&&<span className="bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded-full text-[10px] font-bold">✓ Verified</span>}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1 mb-3">{pet.traits.slice(0,3).map(t=><span key={t} className={cn("px-2 py-0.5 rounded-full text-xs font-semibold",pet.species==="cat"?"bg-purple-50 text-purple-600":"bg-orange-50 text-orange-600")}>{t}</span>)}</div>
+                            {pet.healthCerts.length>0&&<div className="flex flex-wrap gap-1 mb-4">{pet.healthCerts.slice(0,2).map(c=><span key={c} className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full text-[10px] font-medium border border-emerald-100">✓ {c}</span>)}</div>}
+
+                            <button
+                              onClick={() => navigate("/chat", {
+                                state: {
+                                  autoOpen: {
+                                    petId:       String(pet.id),
+                                    petName:     pet.name,
+                                    petPhoto:    pet.photo,
+                                    ownerId:     pet.ownerId ?? pet.owner,
+                                    ownerName:   pet.owner,
+                                    ownerAvatar: pet.ownerAvatar,
+                                  }
+                                }
+                              })}
+                              className="w-full font-bold py-2.5 rounded-2xl text-sm flex items-center justify-center gap-2 transition-all shadow-sm bg-gradient-to-r from-orange-500 to-amber-400 text-white hover:from-orange-600 hover:to-amber-500 shadow-orange-200"
+                            >
+                              <MessageSquare className="w-4 h-4"/>
+                              Message {pet.owner}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -709,17 +691,6 @@ export default function Breeding() {
           </div>
         </div>
       </div>
-
-      {/* ── CHANGE 5: Floating PetChat widget — renders when a pet is liked or Message button clicked ── */}
-      {activeChatTarget && user && (
-        <PetChat
-          currentUserId={user.id}
-          currentUserName={user.firstName ?? user.fullName ?? "You"}
-          currentUserAvatar={user.imageUrl ?? "🐾"}
-          target={activeChatTarget}
-          onClose={() => setActiveChatTarget(null)}
-        />
-      )}
     </>
   );
 }
