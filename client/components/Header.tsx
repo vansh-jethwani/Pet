@@ -1,23 +1,68 @@
-import { Link } from "react-router-dom";
-import { Heart, Menu, X } from "lucide-react";
-import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Heart, Menu, X, Bell } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useUser, useClerk, SignedIn, SignedOut } from "@clerk/clerk-react";
+import { io, Socket } from "socket.io-client";
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useUser();
   const { signOut } = useClerk();
+  const navigate = useNavigate();
+
+  // ── Live unread message count (owner inbox) ────────────────────────────────
+  const [unreadCount, setUnreadCount] = useState(0);
+  const socketRef = useRef<Socket | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const socket = io("/chat", {
+      transports: ["websocket", "polling"],
+    });
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      socket.emit("owner_subscribe", {
+        ownerId: user.id,
+        ownerName: user.fullName ?? user.firstName ?? "Owner",
+      });
+    });
+
+    // Initial inbox snapshot — count messages the owner hasn't seen
+    socket.on("owner_inbox", (data: { rooms: any[] }) => {
+      // We start with 0 — only real-time arrivals increment the badge
+      // (avoids inflating count with historical messages on every page load)
+      setUnreadCount(0);
+    });
+
+    // Increment badge whenever a new message arrives for any of their pets
+    socket.on("inbox_message", () => {
+      setUnreadCount((n) => n + 1);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user?.id]);
+
+  // Clear badge when user navigates to Dashboard > Messages
+  const handleBellClick = () => {
+    setUnreadCount(0);
+    navigate("/chat");
+  };
 
   const navItems = [
-    { label: "Home", href: "/" },
+    { label: "Home",           href: "/" },
+    { label: "Messages",        href: "/chat" },
     { label: "Breeding Match", href: "/breeding" },
-    { label: "Adoption", href: "/adoption" },
-    { label: "Host a Pet", href: "/hosting" },
-    { label: "Marketplace", href: "/marketplace" },
-    { label: "Vets", href: "/vets" },
-    { label: "Insurance", href: "/insurance" },
-    { label: "Store", href: "/store" },
+    { label: "Adoption",       href: "/adoption" },
+    { label: "Host a Pet",     href: "/hosting" },
+    { label: "Marketplace",    href: "/marketplace" },
+    { label: "Vets",           href: "/vets" },
+    { label: "Insurance",      href: "/insurance" },
+    { label: "Store",          href: "/store" },
   ];
 
   return (
@@ -65,16 +110,36 @@ export default function Header() {
           </SignedOut>
 
           <SignedIn>
-  <Link
-    to="/dashboard"
-    className="text-sm text-gray-700 font-medium hover:text-orange-500 transition-colors"
-  >
-    Hi, {user?.firstName ?? "there"} 👋
-  </Link>
-  <button onClick={() => signOut()} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-    Sign Out
-  </button>
-</SignedIn>
+            {/* Notification bell — only shown when signed in */}
+            <button
+              onClick={handleBellClick}
+              className="relative w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-orange-50 hover:border-orange-200 transition-colors"
+              title="Messages"
+            >
+              <Bell className="w-4 h-4 text-gray-600" />
+              {unreadCount > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-orange-500 text-white text-[10px] font-black flex items-center justify-center"
+                  style={{ animation: "badge-pop .22s cubic-bezier(.34,1.56,.64,1) both" }}
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+
+            <Link
+              to="/dashboard"
+              className="text-sm text-gray-700 font-medium hover:text-orange-500 transition-colors"
+            >
+              Hi, {user?.firstName ?? "there"} 👋
+            </Link>
+            <button
+              onClick={() => signOut()}
+              className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Sign Out
+            </button>
+          </SignedIn>
         </div>
 
         {/* Mobile Menu Button */}
@@ -105,7 +170,6 @@ export default function Header() {
               </Link>
             ))}
 
-            {/* Mobile Auth Buttons */}
             <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200">
               <SignedOut>
                 <Link
@@ -126,6 +190,18 @@ export default function Header() {
 
               <SignedIn>
                 <div className="flex-1 flex flex-col gap-2">
+                  <button
+                    onClick={() => { setUnreadCount(0); navigate("/chat"); setIsOpen(false); }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 transition-colors relative"
+                  >
+                    <Bell className="w-4 h-4" />
+                    Messages
+                    {unreadCount > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded-full bg-orange-500 text-white text-[10px] font-black">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
                   <span className="px-4 py-2 text-sm text-gray-700 font-medium text-center">
                     Hi, {user?.firstName ?? "there"} 👋
                   </span>

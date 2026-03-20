@@ -9,6 +9,7 @@ import Vets from "./pages/Vets";
 import Insurance from "./pages/Insurance";
 import Store from "./pages/Store";
 import Community from "./pages/Community";
+import Chat from "./pages/Chat";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
 import DogsCategory from "./pages/categories/DogsCategory";
@@ -22,21 +23,22 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/" element={<Home />} />
-        <Route path="/signin" element={<SignIn />} />
-        <Route path="/signup" element={<SignUp />} />
-        <Route path="/category/dogs" element={<DogsCategory />} />
-        <Route path="/category/cats" element={<CatsCategory />} />
-        <Route path="/category/fish" element={<FishCategory />} />
+        <Route path="/"          element={<Home />} />
+        <Route path="/signin"    element={<SignIn />} />
+        <Route path="/signup"    element={<SignUp />} />
+        <Route path="/chat"      element={<Chat />} />
+        <Route path="/category/dogs"  element={<DogsCategory />} />
+        <Route path="/category/cats"  element={<CatsCategory />} />
+        <Route path="/category/fish"  element={<FishCategory />} />
         <Route path="/category/birds" element={<BirdsCategory />} />
-        <Route path="/breeding" element={<Breeding />} />
-        <Route path="/adoption" element={<Adoption />} />
-        <Route path="/hosting" element={<Hosting />} />
+        <Route path="/breeding"   element={<Breeding />} />
+        <Route path="/adoption"   element={<Adoption />} />
+        <Route path="/hosting"    element={<Hosting />} />
         <Route path="/marketplace" element={<Marketplace />} />
-        <Route path="/vets" element={<Vets />} />
-        <Route path="/insurance" element={<Insurance />} />
-        <Route path="/store" element={<Store />} />
-        <Route path="/community" element={<Community />} />
+        <Route path="/vets"       element={<Vets />} />
+        <Route path="/insurance"  element={<Insurance />} />
+        <Route path="/store"      element={<Store />} />
+        <Route path="/community"  element={<Community />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
