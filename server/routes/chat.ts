@@ -557,11 +557,18 @@ export function registerChatHandlers(io: Server) {
           // 2. Push via notification channels — guaranteed delivery regardless of
           //    whether the socket has joined the room directly.
           //    Both owner AND seeker get inbox_message so real-time works for both.
+          // Include full room info so the client can build a sidebar stub
+          // for brand-new rooms without requiring a page refresh.
           const inboxPayload = {
-            roomId:     data.roomId,
-            message:    msg,
-            petName:    room.petName,
-            seekerName: room.seekerName,
+            roomId:      data.roomId,
+            message:     msg,
+            petId:       room.petId,
+            petName:     room.petName,
+            petPhoto:    room.petPhoto,
+            ownerId:     room.ownerId,
+            ownerName:   room.ownerName,
+            seekerId:    room.seekerId,
+            seekerName:  room.seekerName,
           };
 
           // Owner channels

@@ -516,15 +516,20 @@ export default function ChatPage() {
   const myNameRef       = useRef(myName);
   const myAvatarRef     = useRef(myAvatar);
 
-  useEffect(() => { myIdRef.current     = myId;     }, [myId]);
-  useEffect(() => { myNameRef.current   = myName;   }, [myName]);
-  useEffect(() => { myAvatarRef.current = myAvatar; }, [myAvatar]);
+  // Keep refs in sync synchronously (not in effects) so socket callbacks always
+  // read the latest values. This also fixes the Clerk timing race where the
+  // separate ref-update effect ran AFTER the subscribe effect on the same render.
+  myIdRef.current     = myId;
+  myNameRef.current   = myName;
+  myAvatarRef.current = myAvatar;
 
-  // Re-subscribe when Clerk finishes loading the user (myId goes from "" to real ID)
+  // Re-subscribe when Clerk finishes loading the user (myId goes from "" to real ID).
+  // Because refs are updated synchronously above, doSubscribe() will now read the
+  // correct myId immediately.
   useEffect(() => {
     if (!myId) return;
     const socket = socketRef.current as any;
-    if (socket && socket._doSubscribe) {
+    if (socket?.connected && socket._doSubscribe) {
       socket._doSubscribe();
     }
   }, [myId]);
@@ -740,32 +745,39 @@ export default function ChatPage() {
         setRooms((prev) => {
           const exists = prev.some((r) => r.id === data.roomId);
           if (exists) {
+            // Update existing room with fresh history and clear unread
             return prev.map((r) =>
               r.id === data.roomId
-                ? { ...r, messages: data.messages, petPhoto: data.petPhoto ?? r.petPhoto, unread: 0 }
+                ? {
+                    ...r,
+                    messages:  data.messages,
+                    petPhoto:  data.petPhoto  ?? r.petPhoto,
+                    petName:   data.petName   ?? r.petName,
+                    ownerId:   data.ownerId   ?? r.ownerId,
+                    ownerName: data.ownerName ?? r.ownerName,
+                    unread:    0,
+                  }
                 : r
             );
           }
-          // Room is brand-new (created via autoOpen join_room) — add it to the sidebar
+          // Room is brand-new — always add it to the sidebar regardless of
+          // whether we came from autoOpen (fixes owner side not seeing new rooms).
           const autoState = (location.state as any)?.autoOpen;
-          if (autoState) {
-            const newRoom: ConvRoom = {
-              id:           data.roomId,
-              petId:        data.petId  ?? autoState.petId  ?? "",
-              petName:      data.petName  ?? autoState.petName  ?? "",
-              petPhoto:     data.petPhoto ?? autoState.petPhoto ?? "",
-              ownerId:      data.ownerId  ?? autoState.ownerId  ?? "",
-              ownerName:    data.ownerName  ?? autoState.ownerName  ?? "",
-              seekerId:     data.seekerId  ?? myIdRef.current ?? "",
-              seekerName:   data.seekerName  ?? myNameRef.current ?? "",
-              seekerAvatar: data.seekerAvatar ?? myAvatarRef.current ?? "",
-              messages:     data.messages,
-              createdAt:    new Date().toISOString(),
-              unread:       0,
-            };
-            return [newRoom, ...prev];
-          }
-          return prev;
+          const newRoom: ConvRoom = {
+            id:           data.roomId,
+            petId:        data.petId        ?? autoState?.petId    ?? "",
+            petName:      data.petName      ?? autoState?.petName  ?? "",
+            petPhoto:     data.petPhoto     ?? autoState?.petPhoto ?? "",
+            ownerId:      data.ownerId      ?? autoState?.ownerId  ?? "",
+            ownerName:    data.ownerName    ?? autoState?.ownerName ?? "",
+            seekerId:     data.seekerId     ?? myIdRef.current     ?? "",
+            seekerName:   data.seekerName   ?? myNameRef.current   ?? "",
+            seekerAvatar: data.seekerAvatar ?? myAvatarRef.current ?? "",
+            messages:     data.messages,
+            createdAt:    new Date().toISOString(),
+            unread:       0,
+          };
+          return [newRoom, ...prev];
         });
       }
     );
@@ -807,7 +819,17 @@ export default function ChatPage() {
           AND the room preview here. ── */
     socket.on(
       "inbox_message",
-      (data: { roomId: string; message: ChatMessage }) => {
+      (data: {
+        roomId:     string;
+        message:    ChatMessage;
+        petId?:     string;
+        petName?:   string;
+        petPhoto?:  string;
+        ownerId?:   string;
+        ownerName?: string;
+        seekerId?:  string;
+        seekerName?:string;
+      }) => {
         const { roomId, message: msg } = data;
 
         // If this room is currently open, add to message list
@@ -834,18 +856,35 @@ export default function ChatPage() {
             prev.map((r) => (r.id === roomId ? { ...r, unread: 0 } : r))
           );
         } else {
-          // Background room — update preview and increment unread
-          setRooms((prev) =>
-            prev.map((r) => {
+          // Background room — update preview + unread.
+          // CRITICAL FIX: if the room isn't in the sidebar yet (brand-new
+          // conversation), add a stub so it shows up without a page refresh.
+          setRooms((prev) => {
+            const exists = prev.some((r) => r.id === roomId);
+            if (!exists) {
+              // Minimal stub — fully hydrated when user clicks it (room_joined).
+              const stub: ConvRoom = {
+                id:           roomId,
+                petId:        data.petId      ?? "",
+                petName:      data.petName    ?? "",
+                petPhoto:     data.petPhoto   ?? "",
+                ownerId:      data.ownerId    ?? "",
+                ownerName:    data.ownerName  ?? data.seekerName ?? "",
+                seekerId:     data.seekerId   ?? myIdRef.current,
+                seekerName:   data.seekerName ?? myNameRef.current,
+                seekerAvatar: myAvatarRef.current,
+                messages:     [msg],
+                createdAt:    msg.timestamp,
+                unread:       1,
+              };
+              return [stub, ...prev];
+            }
+            return prev.map((r) => {
               if (r.id !== roomId) return r;
               if (r.messages.some((m) => m.id === msg.id)) return r;
-              return {
-                ...r,
-                messages: [...r.messages, msg],
-                unread: r.unread + 1,
-              };
-            })
-          );
+              return { ...r, messages: [...r.messages, msg], unread: r.unread + 1 };
+            });
+          });
         }
       }
     );
