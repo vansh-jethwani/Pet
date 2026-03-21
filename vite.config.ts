@@ -4,14 +4,15 @@ import path from "path";
 
 export default defineConfig({
   server: {
-    host: "::",
+    host: "0.0.0.0",
     port: 8080,
+    // Vite 7.x requires this exact format to allow all hosts
+    allowedHosts: true,
+    strictPort: true,
     fs: {
       allow: [".", "./client", "./shared"],
       deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "server/**"],
     },
-    // Without external backend in dev, socket.io is attached directly to Vite HTTP server.
-    // Do not proxy /socket.io back to same origin to avoid recursion.
     proxy: {},
   },
   build: {
@@ -40,15 +41,15 @@ function expressPlugin(): Plugin {
       serverRegistered = true;
 
       try {
-        const { createApp, attachSocketServer } = await import("./server/index.js");
+        const { createApp, attachSocketServer } = await import(
+          "./server/index.js"
+        );
         const app = await createApp();
 
-        // Attach Socket.io to the Vite dev HTTP server to maintain one-port behavior.
         if (viteServer.httpServer) {
           attachSocketServer(viteServer.httpServer as any);
         }
 
-        // In dev, intercept API requests and let Vite handle SPA routes.
         viteServer.middlewares.use((req: any, res: any, next: any) => {
           if (req.url?.startsWith("/api")) {
             return app(req, res, next);
@@ -56,7 +57,8 @@ function expressPlugin(): Plugin {
           return next();
         });
 
-        console.log("✅ Express + Socket.io registered");
+        console.log("✅ Express + Socket.io registered on port 8080");
+        console.log("✅ All hosts allowed — ngrok URLs will work");
       } catch (err) {
         console.error("❌ Failed to start Express + Socket.io:", err);
       }
