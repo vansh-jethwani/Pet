@@ -5,7 +5,7 @@ nixPkgs = ["nodejs_22"]
 cmds = ["npm install"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["npm run build:client"]
 
 [start]
-cmd = "node dist/server/production.mjs"
+cmd = "npx tsx server/node-build.ts"
