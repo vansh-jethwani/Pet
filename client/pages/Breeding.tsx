@@ -51,10 +51,10 @@ const STYLES = `
 /* ─── Types ────────────────────────────────────────────────────────────────── */
 type Species = "dog" | "cat";
 interface Pet {
-  id: string | number; name: string; species: Species;
-  breed: string; age: number; gender: "Male" | "Female";
-  location: string; city: string;
-  ownerId?: string; owner: string; ownerAvatar: string; ownerVerified: boolean;
+    id: string | number; name: string; species: Species;
+    breed: string; age: number; gender: "Male" | "Female";
+    location: string; city: string;
+    ownerId?: string; ownerClerkId?: string; owner: string; ownerAvatar: string; ownerVerified: boolean;
   vaccinated: boolean; pedigree: boolean;
   photo: string; fallbackEmoji?: string;
   description: string; traits: string[];
@@ -251,7 +251,7 @@ export default function Breeding() {
 
   const normalizePet = (pet: any): Pet => {
     const id = pet.id ?? pet._id ?? Date.now().toString();
-    return { ...pet, id: id.toString(), ownerAvatar: pet.ownerAvatar||"", description: pet.description||"Looking for the perfect match!", traits: pet.traits||[], healthCerts: pet.healthCerts||[], score: pet.score??0, joinedDate: pet.joinedDate||new Date().toLocaleDateString("en-US",{month:"short",year:"numeric"}) };
+    return { ...pet, id: id.toString(), ownerClerkId: pet.ownerClerkId||"", ownerAvatar: pet.ownerAvatar||"", description: pet.description||"Looking for the perfect match!", traits: pet.traits||[], healthCerts: pet.healthCerts||[], score: pet.score??0, joinedDate: pet.joinedDate||new Date().toLocaleDateString("en-US",{month:"short",year:"numeric"}) };
   };
 
   useEffect(() => {
@@ -361,7 +361,7 @@ export default function Breeding() {
   const submitMyPet = async(e:React.FormEvent)=>{
     e.preventDefault();
     if(!form.name||!form.breed||!form.age||!form.city||!form.location||!form.photo) return;
-    const payload = { name:form.name, species:form.species, breed:form.breed, age:parseInt(form.age,10), gender:form.gender, location:form.location, city:form.city, owner:currentOwner, ownerAvatar:ownerAvatar, ownerVerified:Boolean(user), vaccinated:form.vaccinated, pedigree:form.pedigree, photo:form.photo, description:form.description||"Looking for the perfect match!", traits:form.traits.split(",").map(t=>t.trim()).filter(Boolean), weight:form.weight||"—", color:form.color||"—", score:0, healthCerts:form.healthCerts.split(",").map(c=>c.trim()).filter(Boolean), joinedDate:new Date().toLocaleDateString("en-US",{month:"short",year:"numeric"}) };
+    const payload = { name:form.name, species:form.species, breed:form.breed, age:parseInt(form.age,10), gender:form.gender, location:form.location, city:form.city, owner:currentOwner, ownerClerkId:user?.id ?? "", ownerAvatar:ownerAvatar, ownerVerified:Boolean(user), vaccinated:form.vaccinated, pedigree:form.pedigree, photo:form.photo, description:form.description||"Looking for the perfect match!", traits:form.traits.split(",").map(t=>t.trim()).filter(Boolean), weight:form.weight||"—", color:form.color||"—", score:0, healthCerts:form.healthCerts.split(",").map(c=>c.trim()).filter(Boolean), joinedDate:new Date().toLocaleDateString("en-US",{month:"short",year:"numeric"}) };
     try {
       const res = await fetch("/api/pets",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
       if(!res.ok) throw new Error("Failed");
@@ -662,7 +662,10 @@ export default function Breeding() {
                                     petId:       String(pet.id),
                                     petName:     pet.name,
                                     petPhoto:    pet.photo,
-                                    ownerId:     pet.ownerId ?? pet.owner,
+                                    // ROOT CAUSE FIX: use ownerClerkId (real Clerk user ID)
+                                    // so the chat room's isRoomMember() check passes
+                                    // and the owner can actually send/receive messages.
+                                    ownerId:     pet.ownerClerkId ?? pet.ownerId ?? "",
                                     ownerName:   pet.owner,
                                     ownerAvatar: pet.ownerAvatar,
                                   }

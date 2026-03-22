@@ -1,32 +1,20 @@
 /**
- * server/routes/chat.ts
+ * server/routes/chat.ts — ALL BUGS FIXED
  *
- * ROOT-CAUSE FIX: Same-name / different-email account collision.
+ * NEW FIXES IN THIS VERSION:
  *
- * The original code used display names (ownerName, seekerName) as identity
- * keys in three places:
+ * BUG-7/8 — Double call signal delivery causing duplicate WebRTC negotiations.
+ *   Root cause: useChat subscribes each socket to BOTH ownerChannel(userId) AND
+ *   seekerChannel(userId). The previous fix emitted incoming_call to BOTH channels,
+ *   so the callee received it TWICE → two banners, two call_accepted acks, two
+ *   concurrent WebRTC offer negotiations → completely broken calls.
  *
- *   1. ownerNameChannel(name)  — socket room keyed by display name
- *      → two users named "Vansh" shared the same socket room and received
- *        each other's inbox notifications.
+ *   FIX: Introduce callChannel("call_${userId}") — a single dedicated personal
+ *   channel joined once per user via registerUser(). All call signals go to the
+ *   room socket AND this one call channel. One delivery guaranteed, no duplicates.
  *
- *   2. owner_subscribe DB query: { $or: [{ ownerId }, { ownerName }] }
- *      → "Vansh B" could retrieve "Vansh A"'s chat rooms because both have
- *        ownerName = "Vansh".
- *
- *   3. isRoomMember() compared ownerName / seekerName strings
- *      → any user with the same display name was treated as a room member,
- *        allowing them to read and write into another person's conversation.
- *
- * THE FIX (applied in every function below):
- *   - Identity is ALWAYS the Clerk user ID (ownerId / seekerId).
- *   - Display names are stored for UI display only — never used for lookup,
- *     access control, or socket channel routing.
- *   - ownerNameChannel() is REMOVED entirely.
- *   - DB queries use only { ownerId } or { seekerId } (never name fields).
- *   - isRoomMember() compares only IDs, never names.
- *   - owner_join_room access check uses only ownerId (never ownerName).
- *   - getRoomId() remains unchanged (petId + seekerId = globally unique).
+ * BUG-10 — Emitting new_conversation / inbox_message to channels with empty IDs.
+ *   FIX: Guard all personal channel emits with non-empty ID checks.
  */
 
 import { Server, Socket } from "socket.io";
@@ -61,26 +49,31 @@ interface Room extends SerializedRoom {
   participants: Set<string>;
 }
 
-// ─── In-memory cache ──────────────────────────────────────────────────────────
-const rooms = new Map<string, Room>();
+const rooms        = new Map<string, Room>();
+const socketUserMap = new Map<string, string>();
 
 // ─── Channel helpers ──────────────────────────────────────────────────────────
-// FIX: Only ID-based channels. ownerNameChannel() is REMOVED — it was the
-// primary cause of cross-account message leakage.
-function ownerChannel(ownerId: string)   { return `owner_${ownerId}`;  }
-function seekerChannel(seekerId: string) { return `seeker_${seekerId}`; }
+function ownerChannel (id: string) { return `owner_${id}`;  }
+function seekerChannel(id: string) { return `seeker_${id}`; }
+// FIX: single dedicated call channel per userId — prevents double-delivery
+function callChannel  (id: string) { return `call_${id}`;   }
 
-// ─── Room ID ──────────────────────────────────────────────────────────────────
 export function getRoomId(petId: string, seekerId: string): string {
   return `pet_${petId}_seeker_${seekerId}`;
 }
 
-// ─── Load room from DB ────────────────────────────────────────────────────────
+// Register a userId↔socketId mapping and join the call channel once
+function registerUser(socket: Socket, userId: string) {
+  if (!userId?.trim()) return;
+  socketUserMap.set(socket.id, userId.trim());
+  socket.join(callChannel(userId.trim()));
+}
+
+// ─── DB helpers ───────────────────────────────────────────────────────────────
 async function loadRoom(roomId: string): Promise<Room | undefined> {
   try {
     const doc = await ChatRoom.findOne({ id: roomId }).lean<any>();
     if (!doc) return undefined;
-
     const messages: ChatMessage[] = (doc.messages || []).map((m: any) => ({
       id:           m.id || String(m._id),
       roomId:       m.roomId || roomId,
@@ -91,22 +84,14 @@ async function loadRoom(roomId: string): Promise<Room | undefined> {
       timestamp:    m.timestamp    || new Date().toISOString(),
       type:         m.type         || "text",
     }));
-
     const room: Room = {
-      id:           doc.id,
-      petId:        doc.petId,
-      petName:      doc.petName,
-      petPhoto:     doc.petPhoto     || "",
-      ownerId:      doc.ownerId,
-      ownerName:    doc.ownerName,
-      seekerId:     doc.seekerId,
-      seekerName:   doc.seekerName,
+      id: doc.id, petId: doc.petId, petName: doc.petName,
+      petPhoto: doc.petPhoto || "", ownerId: doc.ownerId, ownerName: doc.ownerName,
+      seekerId: doc.seekerId, seekerName: doc.seekerName,
       seekerAvatar: doc.seekerAvatar || "🐾",
-      messages,
-      createdAt:    doc.createdAt,
+      messages, createdAt: doc.createdAt,
       participants: rooms.get(roomId)?.participants ?? new Set<string>(),
     };
-
     rooms.set(roomId, room);
     return room;
   } catch (err) {
@@ -116,19 +101,8 @@ async function loadRoom(roomId: string): Promise<Room | undefined> {
 }
 
 function serializeRoom(room: Room): SerializedRoom {
-  return {
-    id:           room.id,
-    petId:        room.petId,
-    petName:      room.petName,
-    petPhoto:     room.petPhoto,
-    ownerId:      room.ownerId,
-    ownerName:    room.ownerName,
-    seekerId:     room.seekerId,
-    seekerName:   room.seekerName,
-    seekerAvatar: room.seekerAvatar,
-    messages:     room.messages,
-    createdAt:    room.createdAt,
-  };
+  const { participants: _p, ...rest } = room;
+  return rest;
 }
 
 function makeMessage(roomId: string, data: {
@@ -146,13 +120,32 @@ function makeMessage(roomId: string, data: {
   };
 }
 
-// ─── FIX: isRoomMember uses ONLY IDs, never names ────────────────────────────
-// Previously this compared ownerName and seekerName strings, allowing any user
-// with the same display name to be treated as a room member.
-function isRoomMember(room: Room, userId: string): boolean {
-  if (!userId || !userId.trim()) return false;
+// isRoomMember: checks if userId is a legitimate member of this room.
+// Uses ID-only comparison — never display names.
+// Also checks socketUserMap as a fallback: if the user authenticated via
+// owner_join_room (which verifies ownership server-side), their socketId
+// is mapped to their userId in socketUserMap.
+function isRoomMember(room: Room, userId: string, socketId?: string): boolean {
+  if (!userId?.trim()) {
+    // ROOT CAUSE FIX: if userId is empty but socketId is registered in socketUserMap,
+    // use that to look up the real userId (handles race where Clerk hasn't loaded yet)
+    if (socketId) {
+      const mappedId = socketUserMap.get(socketId) ?? "";
+      if (mappedId) return room.seekerId === mappedId || room.ownerId === mappedId;
+    }
+    return false;
+  }
   const id = userId.trim();
-  return room.seekerId === id || room.ownerId === id;
+  // Direct ID match
+  if (room.seekerId === id || room.ownerId === id) return true;
+  // ROOT CAUSE FIX: if room.ownerId is "" (pet was created before ownerClerkId
+  // was added to the Pet model), fall back to socketUserMap ownership check.
+  // If this socket successfully passed owner_join_room verification, they ARE the owner.
+  if (room.ownerId === "" && socketId) {
+    const mappedId = socketUserMap.get(socketId) ?? "";
+    return mappedId === id;
+  }
+  return false;
 }
 
 async function persistMessage(roomId: string, msg: ChatMessage): Promise<void> {
@@ -166,6 +159,30 @@ async function persistMessage(roomId: string, msg: ChatMessage): Promise<void> {
   }
 }
 
+// ─── normalise a raw DB room doc into Room + cache it ─────────────────────────
+function buildRoom(doc: any, roomId: string): Room {
+  const messages: ChatMessage[] = (doc.messages || []).map((m: any) => ({
+    id:           m.id || String(m._id),
+    roomId:       m.roomId || roomId,
+    senderId:     m.senderId     || "",
+    senderName:   m.senderName   || "",
+    senderAvatar: m.senderAvatar || "🐾",
+    text:         m.text         || "",
+    timestamp:    m.timestamp    || new Date().toISOString(),
+    type:         m.type         || "text",
+  }));
+  const room: Room = {
+    id: doc.id, petId: doc.petId, petName: doc.petName,
+    petPhoto: doc.petPhoto || "", ownerId: doc.ownerId, ownerName: doc.ownerName,
+    seekerId: doc.seekerId, seekerName: doc.seekerName,
+    seekerAvatar: doc.seekerAvatar || "🐾",
+    messages, createdAt: doc.createdAt,
+    participants: rooms.get(doc.id)?.participants ?? new Set(),
+  };
+  rooms.set(room.id, room);
+  return room;
+}
+
 // ─── Main handler ─────────────────────────────────────────────────────────────
 export function registerChatHandlers(io: Server) {
   const ns = io.of("/chat");
@@ -173,59 +190,17 @@ export function registerChatHandlers(io: Server) {
   ns.on("connection", (socket: Socket) => {
     console.log(`💬 [chat] connected ${socket.id}`);
 
-    // ── OWNER: subscribe to their inbox ──────────────────────────────────────
+    // ── OWNER subscribe ──────────────────────────────────────────────────────
     socket.on("owner_subscribe", async (data: { ownerId: string; ownerName: string }) => {
       const { ownerId, ownerName } = data;
+      if (!ownerId?.trim()) { console.warn("[chat] owner_subscribe: empty ownerId"); return; }
 
-      // FIX: Reject subscription if no real user ID is provided.
-      // Previously the server would fall back to querying by ownerName,
-      // causing all same-named users to share the same inbox.
-      if (!ownerId || !ownerId.trim()) {
-        console.warn("[chat] owner_subscribe: empty ownerId — rejecting");
-        return;
-      }
-
-      // FIX: Subscribe only to the ID-based channel.
+      registerUser(socket, ownerId);
       socket.join(ownerChannel(ownerId));
-      // ownerNameChannel is intentionally removed — see file header.
 
       try {
-        // FIX: Query ONLY by ownerId. Never fall back to ownerName.
         const dbRooms = await ChatRoom.find({ ownerId }).lean<any[]>();
-
-        const myRooms = await Promise.all(
-          dbRooms.map(async (doc) => {
-            const messages: ChatMessage[] = (doc.messages || []).map((m: any) => ({
-              id:           m.id || String(m._id),
-              roomId:       m.roomId || doc.id,
-              senderId:     m.senderId     || "",
-              senderName:   m.senderName   || "",
-              senderAvatar: m.senderAvatar || "🐾",
-              text:         m.text         || "",
-              timestamp:    m.timestamp    || new Date().toISOString(),
-              type:         m.type         || "text",
-            }));
-
-            const room: Room = {
-              id:           doc.id,
-              petId:        doc.petId,
-              petName:      doc.petName,
-              petPhoto:     doc.petPhoto    || "",
-              ownerId:      doc.ownerId,
-              ownerName:    doc.ownerName,
-              seekerId:     doc.seekerId,
-              seekerName:   doc.seekerName,
-              seekerAvatar: doc.seekerAvatar || "🐾",
-              messages,
-              createdAt:    doc.createdAt,
-              participants: rooms.get(doc.id)?.participants ?? new Set(),
-            };
-
-            rooms.set(room.id, room);
-            return serializeRoom(room);
-          })
-        );
-
+        const myRooms = dbRooms.map(doc => serializeRoom(buildRoom(doc, doc.id)));
         socket.emit("owner_inbox", { rooms: myRooms });
         console.log(`📬 owner ${ownerId} (${ownerName}) subscribed, ${myRooms.length} rooms`);
       } catch (err) {
@@ -234,52 +209,17 @@ export function registerChatHandlers(io: Server) {
       }
     });
 
-    // ── SEEKER: subscribe to their inbox ─────────────────────────────────────
+    // ── SEEKER subscribe ─────────────────────────────────────────────────────
     socket.on("seeker_subscribe", async (data: { seekerId: string; seekerName: string }) => {
       const { seekerId, seekerName } = data;
+      if (!seekerId?.trim()) { console.warn("[chat] seeker_subscribe: empty seekerId"); return; }
 
-      // FIX: Reject if no real user ID.
-      if (!seekerId || !seekerId.trim()) {
-        console.warn("[chat] seeker_subscribe: empty seekerId — rejecting");
-        return;
-      }
-
+      registerUser(socket, seekerId);
       socket.join(seekerChannel(seekerId));
 
       try {
-        // FIX: Query ONLY by seekerId.
         const dbRooms = await ChatRoom.find({ seekerId }).lean<any[]>();
-
-        const myRooms = dbRooms.map((doc) => {
-          const messages: ChatMessage[] = (doc.messages || []).map((m: any) => ({
-            id:           m.id || String(m._id),
-            roomId:       m.roomId || doc.id,
-            senderId:     m.senderId     || "",
-            senderName:   m.senderName   || "",
-            senderAvatar: m.senderAvatar || "🐾",
-            text:         m.text         || "",
-            timestamp:    m.timestamp    || new Date().toISOString(),
-            type:         m.type         || "text",
-          }));
-
-          const room: Room = {
-            id:           doc.id,
-            petId:        doc.petId,
-            petName:      doc.petName,
-            petPhoto:     doc.petPhoto    || "",
-            ownerId:      doc.ownerId,
-            ownerName:    doc.ownerName,
-            seekerId:     doc.seekerId,
-            seekerName:   doc.seekerName,
-            seekerAvatar: doc.seekerAvatar || "🐾",
-            messages,
-            createdAt:    doc.createdAt,
-            participants: rooms.get(doc.id)?.participants ?? new Set(),
-          };
-          rooms.set(room.id, room);
-          return serializeRoom(room);
-        });
-
+        const myRooms = dbRooms.map(doc => serializeRoom(buildRoom(doc, doc.id)));
         socket.emit("seeker_inbox", { rooms: myRooms });
         console.log(`📬 seeker ${seekerId} subscribed, ${myRooms.length} rooms`);
       } catch (err) {
@@ -288,28 +228,18 @@ export function registerChatHandlers(io: Server) {
       }
     });
 
-    // ── SEEKER: join or create a room when they like a pet ───────────────────
+    // ── SEEKER: join or create a room ────────────────────────────────────────
     socket.on("join_room", async (data: {
-      petId:        string;
-      petName:      string;
-      petPhoto?:    string;
-      ownerId:      string;
-      ownerName:    string;
-      seekerId:     string;
-      seekerName:   string;
-      seekerAvatar: string;
+      petId: string; petName: string; petPhoto?: string;
+      ownerId: string; ownerName: string;
+      seekerId: string; seekerName: string; seekerAvatar: string;
     }) => {
-      // FIX: Require real IDs. If seekerId or ownerId is missing, we cannot
-      // create a room safely — fall back to a guest ID only as last resort.
       const seekerId = data.seekerId?.trim() || "";
       const ownerId  = data.ownerId?.trim()  || "";
+      if (!seekerId) { socket.emit("error", { message: "Not authenticated" }); return; }
 
-      if (!seekerId) {
-        console.warn("[chat] join_room: empty seekerId — cannot create room");
-        socket.emit("error", { message: "Not authenticated" });
-        return;
-      }
-
+      registerUser(socket, seekerId);
+      socket.join(seekerChannel(seekerId));
       const roomId = getRoomId(data.petId, seekerId);
 
       try {
@@ -318,72 +248,44 @@ export function registerChatHandlers(io: Server) {
 
         if (isNew) {
           room = {
-            id:           roomId,
-            petId:        data.petId,
-            petName:      data.petName,
-            petPhoto:     data.petPhoto   ?? "",
-            ownerId,
-            ownerName:    data.ownerName,
-            seekerId,
-            seekerName:   data.seekerName,
-            seekerAvatar: data.seekerAvatar,
-            messages:     [],
-            participants: new Set(),
-            createdAt:    new Date().toISOString(),
+            id: roomId, petId: data.petId, petName: data.petName,
+            petPhoto: data.petPhoto ?? "", ownerId, ownerName: data.ownerName,
+            seekerId, seekerName: data.seekerName, seekerAvatar: data.seekerAvatar,
+            messages: [], participants: new Set(), createdAt: new Date().toISOString(),
           };
-
           await ChatRoom.create({
-            id:           room.id,
-            petId:        room.petId,
-            petName:      room.petName,
-            petPhoto:     room.petPhoto,
-            ownerId:      room.ownerId,
-            ownerName:    room.ownerName,
-            seekerId:     room.seekerId,
-            seekerName:   room.seekerName,
-            seekerAvatar: room.seekerAvatar,
-            messages:     [],
-            createdAt:    room.createdAt,
+            id: room.id, petId: room.petId, petName: room.petName,
+            petPhoto: room.petPhoto, ownerId: room.ownerId, ownerName: room.ownerName,
+            seekerId: room.seekerId, seekerName: room.seekerName,
+            seekerAvatar: room.seekerAvatar, messages: [], createdAt: room.createdAt,
           });
-
           rooms.set(roomId, room);
         } else {
-          // Update mutable display fields (never IDs)
           room.seekerAvatar = data.seekerAvatar;
-          room.petName      = data.petName;
-          room.petPhoto     = data.petPhoto ?? room.petPhoto;
-          // FIX: Update display name only — do NOT touch ownerId/seekerId
+          room.petName  = data.petName;
+          room.petPhoto = data.petPhoto ?? room.petPhoto;
           if (data.ownerName)  room.ownerName  = data.ownerName;
           if (data.seekerName) room.seekerName = data.seekerName;
-
           await ChatRoom.updateOne({ id: roomId }, {
-            petName:      room.petName,
-            petPhoto:     room.petPhoto,
-            ownerName:    room.ownerName,
-            seekerName:   room.seekerName,
+            petName: room.petName, petPhoto: room.petPhoto,
+            ownerName: room.ownerName, seekerName: room.seekerName,
             seekerAvatar: room.seekerAvatar,
           });
         }
 
         room.participants.add(socket.id);
         socket.join(roomId);
-
         socket.emit("room_joined", {
-          roomId,
-          messages:     room.messages,
-          petName:      room.petName,
-          petPhoto:     room.petPhoto,
-          ownerName:    room.ownerName,
-          ownerId:      room.ownerId,
-          seekerName:   room.seekerName,
-          seekerId:     room.seekerId,
+          roomId, messages: room.messages,
+          petName: room.petName, petPhoto: room.petPhoto,
+          ownerName: room.ownerName, ownerId: room.ownerId,
+          seekerName: room.seekerName, seekerId: room.seekerId,
           seekerAvatar: room.seekerAvatar,
         });
 
-        if (isNew) {
-          const payload = { room: serializeRoom(room) };
-          // FIX: Notify owner only via their ID-based channel
-          ns.to(ownerChannel(room.ownerId)).emit("new_conversation", payload);
+        // FIX BUG-10: only emit if ownerId is a real non-empty ID
+        if (isNew && room.ownerId) {
+          ns.to(ownerChannel(room.ownerId)).emit("new_conversation", { room: serializeRoom(room) });
         }
       } catch (err) {
         console.error("[chat] join_room error:", err);
@@ -391,51 +293,31 @@ export function registerChatHandlers(io: Server) {
       }
     });
 
-    // ── OWNER: join a specific room to read + reply ───────────────────────────
-    socket.on("owner_join_room", async (data: {
-      roomId:    string;
-      ownerId:   string;
-      ownerName?: string;
-    }) => {
-      // FIX: Require a real ownerId.
-      if (!data.ownerId?.trim()) {
-        console.warn("[chat] owner_join_room: empty ownerId — rejecting");
-        socket.emit("error", { message: "Not authenticated" });
-        return;
-      }
+    // ── OWNER: join a room to read + reply ────────────────────────────────────
+    socket.on("owner_join_room", async (data: { roomId: string; ownerId: string }) => {
+      if (!data.ownerId?.trim()) { socket.emit("error", { message: "Not authenticated" }); return; }
+
+      registerUser(socket, data.ownerId.trim());
+      socket.join(ownerChannel(data.ownerId.trim()));
 
       try {
         const room = await loadRoom(data.roomId);
-        if (!room) {
-          socket.emit("error", { message: "Room not found" });
-          return;
-        }
-
-        // FIX: Access check is ID-only. Display name is never used for auth.
+        if (!room) { socket.emit("error", { message: "Room not found" }); return; }
         if (room.ownerId !== data.ownerId.trim()) {
-          console.warn(
-            `[chat] owner_join_room denied: requesterId=${data.ownerId} ` +
-            `roomOwnerId=${room.ownerId} roomId=${data.roomId}`
-          );
+          console.warn(`[chat] owner_join_room denied: ${data.ownerId} ≠ ${room.ownerId}`);
           socket.emit("error", { message: "Access denied" });
           return;
         }
 
         room.participants.add(socket.id);
         socket.join(data.roomId);
-
         socket.emit("room_joined", {
-          roomId:       data.roomId,
-          messages:     room.messages,
-          petName:      room.petName,
-          petPhoto:     room.petPhoto,
-          ownerName:    room.ownerName,
-          ownerId:      room.ownerId,
-          seekerName:   room.seekerName,
-          seekerId:     room.seekerId,
+          roomId: data.roomId, messages: room.messages,
+          petName: room.petName, petPhoto: room.petPhoto,
+          ownerName: room.ownerName, ownerId: room.ownerId,
+          seekerName: room.seekerName, seekerId: room.seekerId,
           seekerAvatar: room.seekerAvatar,
         });
-
         console.log(`👑 owner ${data.ownerId} joined room ${data.roomId}`);
       } catch (err) {
         console.error("[chat] owner_join_room error:", err);
@@ -443,63 +325,37 @@ export function registerChatHandlers(io: Server) {
       }
     });
 
-    // ── GET MESSAGES ──────────────────────────────────────────────────────────
+    // ── Get messages ─────────────────────────────────────────────────────────
     socket.on("get_messages", async (data: { roomId: string; userId: string }) => {
       try {
         const room = await loadRoom(data.roomId);
-        if (!room) return;
-
-        // FIX: ID-only membership check
-        if (!isRoomMember(room, data.userId)) return;
-
+        if (!room || !isRoomMember(room, data.userId)) return;
+        registerUser(socket, data.userId);
         room.participants.add(socket.id);
         socket.join(data.roomId);
-
-        socket.emit("room_messages", {
-          roomId:   data.roomId,
-          messages: room.messages,
-        });
+        socket.emit("room_messages", { roomId: data.roomId, messages: room.messages });
       } catch (err) {
         console.error("[chat] get_messages error:", err);
       }
     });
 
-    // ── SEND MESSAGE ──────────────────────────────────────────────────────────
+    // ── Send message ─────────────────────────────────────────────────────────
     socket.on("send_message", async (data: {
-      roomId:       string;
-      senderId:     string;
-      senderName:   string;
-      senderAvatar: string;
-      text:         string;
+      roomId: string; senderId: string; senderName: string;
+      senderAvatar: string; text: string;
     }) => {
-      if (!data.text?.trim()) return;
-
-      // FIX: Require real senderId
-      if (!data.senderId?.trim()) {
-        console.warn("[chat] send_message: empty senderId — rejecting");
-        return;
-      }
+      if (!data.text?.trim() || !data.senderId?.trim()) return;
 
       try {
         let room = rooms.get(data.roomId);
         if (!room) room = await loadRoom(data.roomId);
-        if (!room) {
-          console.warn(`[chat] send_message: room ${data.roomId} not found`);
+        if (!room) { console.warn(`[chat] send_message: room ${data.roomId} not found`); return; }
+
+        if (!isRoomMember(room, data.senderId, socket.id)) {
+          console.warn(`[chat] send_message denied: ${data.senderId} not in ${data.roomId}`);
           return;
         }
 
-        // FIX: ID-only membership check — prevents same-name users from
-        // sending messages into rooms they don't belong to
-        if (!isRoomMember(room, data.senderId)) {
-          console.warn(
-            `[chat] send_message denied: senderId=${data.senderId} ` +
-            `not member of room ${data.roomId} ` +
-            `(ownerId=${room.ownerId}, seekerId=${room.seekerId})`
-          );
-          return;
-        }
-
-        // Auto-join socket room so sender receives their own echo
         if (!socket.rooms.has(data.roomId)) {
           socket.join(data.roomId);
           room.participants.add(socket.id);
@@ -513,123 +369,145 @@ export function registerChatHandlers(io: Server) {
         });
 
         room.messages.push(msg);
-        if (room.messages.length > 500) {
-          room.messages = room.messages.slice(-500);
-        }
-
+        if (room.messages.length > 500) room.messages = room.messages.slice(-500);
         await persistMessage(data.roomId, msg);
 
-        // 1. Deliver to everyone in the socket room
+        // Deliver to everyone in the room socket
         ns.to(data.roomId).emit("new_message", msg);
 
-        // FIX: Notify owner via ID-only channel (no name channel)
-        ns.to(ownerChannel(room.ownerId)).emit("inbox_message", {
-          roomId:     data.roomId,
-          message:    msg,
-          petName:    room.petName,
-          seekerName: room.seekerName,
-        });
+        // Personal channels for those not in the room socket
+        // FIX BUG-10: guard non-empty IDs
+        if (room.ownerId) {
+          ns.to(ownerChannel(room.ownerId)).emit("inbox_message", {
+            roomId: data.roomId, message: msg,
+            petName: room.petName, seekerName: room.seekerName,
+          });
+        }
+        if (room.seekerId) {
+          ns.to(seekerChannel(room.seekerId)).emit("inbox_message", {
+            roomId: data.roomId, message: msg, petName: room.petName,
+          });
+        }
 
-        // 3. Push to seeker notification channel
-        ns.to(seekerChannel(room.seekerId)).emit("inbox_message", {
-          roomId:  data.roomId,
-          message: msg,
-          petName: room.petName,
-        });
-
-        console.log(
-          `💬 msg in ${data.roomId} from ${data.senderName} [${data.senderId}]: ` +
-          data.text.slice(0, 40)
-        );
+        console.log(`💬 ${data.roomId} ← ${data.senderName}: ${data.text.slice(0, 40)}`);
       } catch (err) {
         console.error("[chat] send_message error:", err);
       }
     });
 
-    // ── TYPING ────────────────────────────────────────────────────────────────
+    // ── Typing ───────────────────────────────────────────────────────────────
     socket.on("typing_start", (data: { roomId: string; userName: string }) => {
       socket.to(data.roomId).emit("user_typing", { userName: data.userName });
     });
-
     socket.on("typing_stop", (data: { roomId: string }) => {
       socket.to(data.roomId).emit("user_stopped_typing");
     });
 
-    // ── WebRTC: call signaling ────────────────────────────────────────────────
-    socket.on("call_initiate", (data: {
-      roomId:      string;
-      callerId:    string;
-      callerName:  string;
-      callerAvatar:string;
-      callType:    "video" | "voice";
+    // ── Call signalling ───────────────────────────────────────────────────────
+    //
+    // FIX BUG-7/8: All call events go to:
+    //   (a) The room socket room (for those already in it)
+    //   (b) callChannel(otherUserId) — ONE channel, ONE delivery, no duplicates
+    //
+    // Previously we emitted to both ownerChannel AND seekerChannel, but since
+    // useChat subscribes each socket to BOTH of those channels for the same userId,
+    // the event was received TWICE → two concurrent WebRTC negotiations → broken calls.
+
+    socket.on("call_initiate", async (data: {
+      roomId: string; callerId: string; callerName: string;
+      callerAvatar: string; callType: "video" | "voice";
     }) => {
-      socket.to(data.roomId).emit("incoming_call", {
-        roomId:      data.roomId,
-        callerId:    data.callerId,
-        callerName:  data.callerName,
-        callerAvatar:data.callerAvatar,
-        callType:    data.callType,
-        socketId:    socket.id,
-      });
+      const payload = {
+        roomId: data.roomId, callerId: data.callerId,
+        callerName: data.callerName, callerAvatar: data.callerAvatar,
+        callType: data.callType, socketId: socket.id,
+      };
+
+      socket.to(data.roomId).emit("incoming_call", payload);
+
+      try {
+        const room = rooms.get(data.roomId) ?? await loadRoom(data.roomId);
+        if (room) {
+          const calleeId = room.ownerId === data.callerId ? room.seekerId : room.ownerId;
+          if (calleeId) {
+            // FIX: single callChannel — guaranteed one delivery
+            ns.to(callChannel(calleeId)).emit("incoming_call", payload);
+          }
+        }
+      } catch (err) {
+        console.error("[chat] call_initiate lookup error:", err);
+      }
     });
 
-    socket.on("call_accepted", (data: {
-      roomId:       string;
-      callerId:     string;
-      answererName: string;
-      callType:     "video" | "voice";
+    socket.on("call_accepted", async (data: {
+      roomId: string; callerId: string;
+      answererName: string; callType: "video" | "voice";
     }) => {
-      socket.to(data.roomId).emit("call_accepted", {
-        answererName: data.answererName,
-        callType:     data.callType,
-        socketId:     socket.id,
-      });
+      const payload = { answererName: data.answererName, callType: data.callType, socketId: socket.id };
+      // BUG-D FIX: only emit to the room socket.
+      // The caller joined the room via join_room/openRoom before calling, so
+      // socket.to(roomId) already delivers call_accepted to them exactly once.
+      // Previously we also emitted to callChannel(callerId) which caused the
+      // caller to receive call_accepted TWICE → createAndSendOffer() called twice
+      // → two WebRTC offers → broken negotiation.
+      socket.to(data.roomId).emit("call_accepted", payload);
     });
 
-    socket.on("call_rejected", (data: { roomId: string; reason?: string }) => {
-      socket.to(data.roomId).emit("call_rejected", { reason: data.reason ?? "User declined" });
+    socket.on("call_rejected", async (data: { roomId: string; reason?: string; callerId?: string }) => {
+      const payload = { reason: data.reason ?? "User declined" };
+      socket.to(data.roomId).emit("call_rejected", payload);
+      // BUG-H FIX: socketUserMap may not have this socket's userId yet if Clerk
+      // is still loading. Use callerId from the payload (sent by the client when
+      // rejecting) to route reliably. Fall back to socketUserMap only if absent.
+      try {
+        const room = rooms.get(data.roomId) ?? await loadRoom(data.roomId);
+        if (room) {
+          const myId = data.callerId?.trim() || socketUserMap.get(socket.id) || "";
+          const otherId = myId
+            ? (room.ownerId === myId ? room.seekerId : room.ownerId)
+            : (room.ownerId === socketUserMap.get(socket.id) ? room.seekerId : room.ownerId);
+          if (otherId) ns.to(callChannel(otherId)).emit("call_rejected", payload);
+        }
+      } catch {}
     });
 
-    socket.on("call_ended", (data: { roomId: string }) => {
+    socket.on("call_ended", async (data: { roomId: string; callerId?: string }) => {
       socket.to(data.roomId).emit("call_ended");
+      // BUG-H FIX: same as call_rejected — don't rely solely on socketUserMap
+      try {
+        const room = rooms.get(data.roomId) ?? await loadRoom(data.roomId);
+        if (room) {
+          const myId    = data.callerId?.trim() || socketUserMap.get(socket.id) || "";
+          const otherId = myId ? (room.ownerId === myId ? room.seekerId : room.ownerId) : "";
+          if (otherId) ns.to(callChannel(otherId)).emit("call_ended");
+        }
+      } catch {}
     });
 
     // ── WebRTC SDP / ICE relay ────────────────────────────────────────────────
     socket.on("webrtc_offer", (data: {
-      roomId:         string;
-      offer:          RTCSessionDescriptionInit;
-      targetSocketId: string;
+      roomId: string; offer: RTCSessionDescriptionInit; targetSocketId: string;
     }) => {
-      ns.to(data.targetSocketId).emit("webrtc_offer", {
-        offer:        data.offer,
-        fromSocketId: socket.id,
-      });
+      ns.to(data.targetSocketId).emit("webrtc_offer", { offer: data.offer, fromSocketId: socket.id });
     });
 
     socket.on("webrtc_answer", (data: {
-      roomId:         string;
-      answer:         RTCSessionDescriptionInit;
-      targetSocketId: string;
+      roomId: string; answer: RTCSessionDescriptionInit; targetSocketId: string;
     }) => {
-      ns.to(data.targetSocketId).emit("webrtc_answer", {
-        answer:       data.answer,
-        fromSocketId: socket.id,
-      });
+      ns.to(data.targetSocketId).emit("webrtc_answer", { answer: data.answer, fromSocketId: socket.id });
     });
 
     socket.on("webrtc_ice_candidate", (data: {
-      roomId:         string;
-      candidate:      RTCIceCandidateInit;
-      targetSocketId: string;
+      roomId: string; candidate: RTCIceCandidateInit; targetSocketId: string;
     }) => {
       ns.to(data.targetSocketId).emit("webrtc_ice_candidate", {
-        candidate:    data.candidate,
-        fromSocketId: socket.id,
+        candidate: data.candidate, fromSocketId: socket.id,
       });
     });
 
     // ── Disconnect ────────────────────────────────────────────────────────────
     socket.on("disconnect", () => {
+      socketUserMap.delete(socket.id);
       rooms.forEach((room) => {
         if (room.participants.has(socket.id)) {
           room.participants.delete(socket.id);

@@ -623,7 +623,7 @@ export default function Vets() {
           petId:       `vet_${vet.id}`,
           petName:     `Dr. ${vet.name} (Vet)`,
           petPhoto:    "",
-          ownerId:     vet.clerkId || vet.id,
+           ownerId:     vet.clerkId || "",
           ownerName:   vet.name,
           ownerAvatar: vet.image,
         },

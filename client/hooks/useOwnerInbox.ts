@@ -1,14 +1,3 @@
-/**
- * client/hooks/useOwnerInbox.ts
- *
- * FIX: owner_subscribe now sends ownerId (Clerk user ID) only.
- * The server no longer accepts a name-based fallback, so we must always
- * have a real userId before subscribing. If ownerId is empty we wait.
- *
- * openRoom similarly sends only ownerId to owner_join_room.
- * No display-name is used as an identity or lookup key.
- */
-
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { ChatMessage } from "./useChat";
@@ -25,32 +14,57 @@ export interface InboxRoom {
   seekerAvatar: string;
   messages:     ChatMessage[];
   createdAt:    string;
-  // client-only
   unreadCount:  number;
   isOpen:       boolean;
 }
 
 interface UseOwnerInboxOptions {
-  ownerId:    string;   // MUST be the Clerk user ID — never a display name
-  ownerName:  string;   // display name only, never used as identity key
-  ownerAvatar:string;
-  enabled:    boolean;
+  ownerId:     string;
+  ownerName:   string;
+  ownerAvatar: string;
+  enabled:     boolean;
 }
 
-export function useOwnerInbox({
-  ownerId,
-  ownerName,
-  ownerAvatar,
-  enabled,
-}: UseOwnerInboxOptions) {
+function sortRooms(rooms: InboxRoom[]): InboxRoom[] {
+  return [...rooms].sort((a, b) => {
+    const la = a.messages[a.messages.length - 1]?.timestamp ?? a.createdAt;
+    const lb = b.messages[b.messages.length - 1]?.timestamp ?? b.createdAt;
+    return lb.localeCompare(la);
+  });
+}
+
+function dedupeAndReplace(prev: ChatMessage[], msg: ChatMessage): ChatMessage[] {
+  if (prev.some(m => m.id === msg.id)) return prev;
+  const optIdx = prev.findIndex(
+    m => m.id.startsWith("opt_") &&
+      m.senderId === msg.senderId &&
+      m.text === msg.text &&
+      Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10000
+  );
+  if (optIdx !== -1) {
+    const next = [...prev];
+    next[optIdx] = msg;
+    return next;
+  }
+  return [...prev, msg];
+}
+
+export function useOwnerInbox({ ownerId, ownerName, ownerAvatar, enabled }: UseOwnerInboxOptions) {
   const socketRef     = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [rooms,       setRooms]       = useState<InboxRoom[]>([]);
   const [activeRoomId,setActiveRoomId]= useState<string | null>(null);
   const [totalUnread, setTotalUnread] = useState(0);
+  // FIX BUG-11: expose typing state so OwnerInbox can show typing indicator
+  const [typingUsers, setTypingUsers] = useState<Record<string, string>>({}); // roomId → userName
 
-  // Keep activeRoomId in a ref so socket callbacks always see current value
   const activeRoomIdRef = useRef<string | null>(null);
+  const ownerIdRef      = useRef(ownerId);
+  const ownerNameRef    = useRef(ownerName);
+  const ownerAvatarRef  = useRef(ownerAvatar);
+  useEffect(() => { ownerIdRef.current     = ownerId;     }, [ownerId]);
+  useEffect(() => { ownerNameRef.current   = ownerName;   }, [ownerName]);
+  useEffect(() => { ownerAvatarRef.current = ownerAvatar; }, [ownerAvatar]);
 
   const handleSetActiveRoomId = useCallback((id: string | null) => {
     activeRoomIdRef.current = id;
@@ -58,133 +72,146 @@ export function useOwnerInbox({
   }, []);
 
   useEffect(() => {
-    setTotalUnread(rooms.reduce((sum, r) => sum + r.unreadCount, 0));
+    setTotalUnread(rooms.reduce((s, r) => s + r.unreadCount, 0));
   }, [rooms]);
 
   useEffect(() => {
-    // FIX: Don't connect at all if we don't have a real user ID.
-    // Previously the hook would subscribe using an empty ownerId which the
-    // server matched against ownerName — causing cross-account leakage.
-    if (!enabled || !ownerId || !ownerId.trim()) return;
+    if (!enabled || !ownerId?.trim()) return;
 
     const socket = io("/chat", { transports: ["websocket", "polling"] });
     socketRef.current = socket;
 
-    socket.on("connect", () => {
-      setIsConnected(true);
-      // FIX: Send only the Clerk user ID. ownerName is for display only.
-      socket.emit("owner_subscribe", { ownerId, ownerName });
+    const doSubscribe = () => {
+      const id   = ownerIdRef.current;
+      const name = ownerNameRef.current;
+      if (!id?.trim() || !socket.connected) return;
+      socket.emit("owner_subscribe", { ownerId: id, ownerName: name });
+    };
+
+    socket.on("connect",    () => { setIsConnected(true);  doSubscribe(); });
+    socket.on("disconnect", () =>   setIsConnected(false));
+
+    socket.on("owner_inbox", (data: { rooms: Omit<InboxRoom, "unreadCount"|"isOpen">[] }) => {
+      setRooms(sortRooms(data.rooms.map(r => ({ ...r, unreadCount: 0, isOpen: false }))));
     });
 
-    socket.on("disconnect", () => setIsConnected(false));
-
-    // Full inbox snapshot on connect
-    socket.on("owner_inbox", (data: { rooms: Omit<InboxRoom, "unreadCount" | "isOpen">[] }) => {
-      setRooms(
-        data.rooms.map((r) => ({ ...r, unreadCount: 0, isOpen: false }))
-      );
-    });
-
-    // A seeker started a brand-new conversation
-    socket.on("new_conversation", (data: { room: Omit<InboxRoom, "unreadCount" | "isOpen"> }) => {
-      setRooms((prev) => {
-        if (prev.some((r) => r.id === data.room.id)) return prev;
-        return [{ ...data.room, unreadCount: 1, isOpen: false }, ...prev];
+    socket.on("new_conversation", (data: { room: Omit<InboxRoom, "unreadCount"|"isOpen"> }) => {
+      setRooms(prev => {
+        if (prev.some(r => r.id === data.room.id)) return prev;
+        return sortRooms([{ ...data.room, unreadCount: 1, isOpen: false }, ...prev]);
       });
     });
 
-    // Preview update only — unread count handled by new_message
-    socket.on("inbox_message", (data: {
-      roomId:  string;
-      message: ChatMessage;
-    }) => {
-      setRooms((prev) =>
-        prev.map((room) => {
-          if (room.id !== data.roomId) return room;
-          const already = room.messages.some((m) => m.id === data.message.id);
-          return {
-            ...room,
-            messages: already ? room.messages : [...room.messages, data.message],
-          };
-        })
-      );
+    socket.on("inbox_message", (data: { roomId: string; message: ChatMessage }) => {
+      setRooms(prev => sortRooms(prev.map(room => {
+        if (room.id !== data.roomId) return room;
+        return { ...room, messages: dedupeAndReplace(room.messages, data.message) };
+      })));
     });
 
-    // Real-time message delivery — single source for unread count
     socket.on("new_message", (msg: ChatMessage) => {
-      setRooms((prev) =>
-        prev.map((room) => {
-          if (room.id !== msg.roomId) return room;
-          if (room.messages.some((m) => m.id === msg.id)) return room;
-          return {
-            ...room,
-            messages:    [...room.messages, msg],
-            unreadCount: activeRoomIdRef.current === msg.roomId
-              ? 0
-              : room.unreadCount + 1,
-          };
-        })
-      );
+      setRooms(prev => sortRooms(prev.map(room => {
+        if (room.id !== msg.roomId) return room;
+        const updatedMessages = dedupeAndReplace(room.messages, msg);
+        return {
+          ...room,
+          messages: updatedMessages,
+          unreadCount: activeRoomIdRef.current === msg.roomId ? 0 : room.unreadCount + 1,
+        };
+      })));
     });
 
-    return () => {
-      socket.disconnect();
-    };
-  }, [enabled, ownerId, ownerName]);
+    // FIX BUG-11: listen for typing events and expose them via typingUsers state
+    socket.on("user_typing", (data: { userName: string }) => {
+      const roomId = activeRoomIdRef.current;
+      if (!roomId) return;
+      setTypingUsers(prev => ({ ...prev, [roomId]: data.userName }));
+    });
 
-  // ── Open a conversation ───────────────────────────────────────────────────
+    socket.on("user_stopped_typing", () => {
+      const roomId = activeRoomIdRef.current;
+      if (!roomId) return;
+      setTypingUsers(prev => {
+        const next = { ...prev };
+        delete next[roomId];
+        return next;
+      });
+    });
+
+    return () => { socket.disconnect(); };
+  }, [enabled, ownerId]);
+
+  // Re-subscribe when ownerId becomes available (Clerk async load)
+  useEffect(() => {
+    if (!ownerId?.trim()) return;
+    const s = socketRef.current;
+    if (!s?.connected) return;
+    s.emit("owner_subscribe", { ownerId, ownerName });
+  }, [ownerId, ownerName]);
+
   const openRoom = useCallback((roomId: string) => {
     handleSetActiveRoomId(roomId);
-
-    setRooms((prev) =>
-      prev.map((r) =>
-        r.id === roomId
-          ? { ...r, unreadCount: 0, isOpen: true }
-          : { ...r, isOpen: false }
-      )
-    );
-
-    // FIX: Send only ownerId to the server — never ownerName as identity
-    socketRef.current?.emit("owner_join_room", { roomId, ownerId });
-  }, [ownerId, handleSetActiveRoomId]);
+    setRooms(prev => prev.map(r =>
+      r.id === roomId ? { ...r, unreadCount: 0, isOpen: true } : { ...r, isOpen: false }
+    ));
+    // Clear any stale typing indicator when opening a room
+    setTypingUsers(prev => {
+      const next = { ...prev };
+      delete next[roomId];
+      return next;
+    });
+    socketRef.current?.emit("owner_join_room", { roomId, ownerId: ownerIdRef.current });
+  }, [handleSetActiveRoomId]);
 
   const closeRoom = useCallback(() => {
     handleSetActiveRoomId(null);
-    setRooms((prev) => prev.map((r) => ({ ...r, isOpen: false })));
+    setRooms(prev => prev.map(r => ({ ...r, isOpen: false })));
   }, [handleSetActiveRoomId]);
 
-  // ── Send a reply ──────────────────────────────────────────────────────────
   const sendMessage = useCallback((roomId: string, text: string) => {
     if (!text.trim()) return;
+    const id   = ownerIdRef.current;
+    const name = ownerNameRef.current;
+    const av   = ownerAvatarRef.current;
+
+    const optimistic: ChatMessage = {
+      id:           `opt_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+      roomId,
+      senderId:     id,
+      senderName:   name,
+      senderAvatar: av,
+      text:         text.trim(),
+      timestamp:    new Date().toISOString(),
+      type:         "text",
+    };
+    setRooms(prev => sortRooms(prev.map(r =>
+      r.id === roomId ? { ...r, messages: [...r.messages, optimistic] } : r
+    )));
+
     socketRef.current?.emit("send_message", {
       roomId,
-      senderId:     ownerId,     // always Clerk user ID
-      senderName:   ownerName,
-      senderAvatar: ownerAvatar,
+      senderId:     id,
+      senderName:   name,
+      senderAvatar: av,
       text:         text.trim(),
     });
-  }, [ownerId, ownerName, ownerAvatar]);
+  }, []);
 
   const sendTypingStart = useCallback((roomId: string) => {
-    socketRef.current?.emit("typing_start", { roomId, userName: ownerName });
-  }, [ownerName]);
+    socketRef.current?.emit("typing_start", { roomId, userName: ownerNameRef.current });
+  }, []);
 
   const sendTypingStop = useCallback((roomId: string) => {
     socketRef.current?.emit("typing_stop", { roomId });
   }, []);
 
-  const activeRoom = rooms.find((r) => r.id === activeRoomId) ?? null;
+  const activeRoom = rooms.find(r => r.id === activeRoomId) ?? null;
+  // Convenience: typing user for the currently active room
+  const typingUser = activeRoomId ? (typingUsers[activeRoomId] ?? null) : null;
 
   return {
-    isConnected,
-    rooms,
-    activeRoom,
-    activeRoomId,
-    totalUnread,
-    openRoom,
-    closeRoom,
-    sendMessage,
-    sendTypingStart,
-    sendTypingStop,
+    isConnected, rooms, activeRoom, activeRoomId, totalUnread,
+    typingUser,   // FIX BUG-11: now exposed so OwnerInbox can render indicator
+    openRoom, closeRoom, sendMessage, sendTypingStart, sendTypingStop,
   };
 }

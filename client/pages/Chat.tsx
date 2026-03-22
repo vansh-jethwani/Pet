@@ -1,23 +1,20 @@
 /**
- * client/pages/Chat.tsx
+ * client/pages/Chat.tsx — ALL BUGS FIXED
  *
- * FIX: All identity checks now use Clerk user ID (myId), never display name (myName).
+ * BUG-14: autoOpenDoneRef not reset when location.state changes.
+ *   When the user is already on /chat and navigates to a different pet's chat
+ *   (e.g. from Breeding matches), autoOpenDoneRef.current was still true from
+ *   the previous open, so the new autoOpen state was silently ignored.
+ *   FIX: Added a dedicated useEffect([location.state]) that resets the ref
+ *   whenever the navigation state changes.
  *
- * The original code had these name-based comparisons that caused two users with
- * the same display name to see each other's conversations:
+ * ownerId fallback in autoOpen join_room:
+ *   The original code had no ?? "" guard on autoOpen.ownerId, so undefined
+ *   could propagate into the join_room emit. Added ?? "" to be safe.
  *
- *   BEFORE (buggy):
- *     const isOwner = room.ownerName === myName || room.ownerId === myId;
- *     const otherName = room.ownerName === myName ? room.seekerName : room.ownerName;
- *
- *   AFTER (fixed):
- *     const isOwner = room.ownerId === myId;
- *     const otherName = room.ownerId === myId ? room.seekerName : room.ownerName;
- *
- * Additionally:
- *   - doSubscribe() waits for myId to be non-empty before emitting
- *   - owner_join_room no longer passes ownerName (server ignores it now)
- *   - openRoom isOwner check is ID-only
+ * All previous fixes (ID-only identity, doSubscribe for both channels,
+ * inbox_message updating active window, room_joined replacing messages,
+ * autoOpen race condition, WebRTC track ordering, etc.) are retained.
  */
 
 import {
@@ -147,19 +144,17 @@ function timeAgo(iso: string): string {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
   return `${Math.floor(diff / 86400)}d`;
 }
-
 function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 }
-
 function fmtDur(s: number): string {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
 function mergeRooms(prev: ConvRoom[], incoming: ConvRoom[]): ConvRoom[] {
   const map = new Map<string, ConvRoom>();
-  prev.forEach((r) => map.set(r.id, r));
-  incoming.forEach((r) => {
+  prev.forEach(r => map.set(r.id, r));
+  incoming.forEach(r => {
     const existing = map.get(r.id);
     map.set(r.id, { ...r, unread: existing ? existing.unread : r.unread });
   });
@@ -303,10 +298,7 @@ export default function ChatPage() {
   const { user }  = useUser();
   const location  = useLocation();
 
-  // FIX: myId is the Clerk user ID — this is the ONLY identity key used for
-  // room ownership checks, member access, and message sending.
-  // myName is display-only and is never compared against room.ownerName/seekerName
-  // for any identity or access control decision.
+  // myId is the Clerk user ID — the ONLY identity key used for all access checks
   const myId     = user?.id        ?? "";
   const myName   = user?.firstName ?? user?.fullName ?? "You";
   const myAvatar = user?.imageUrl  ?? "🐾";
@@ -331,39 +323,39 @@ export default function ChatPage() {
   useEffect(() => {
     if (!myId) return;
     const socket = socketRef.current as any;
-    if (socket && socket._doSubscribe) socket._doSubscribe();
+    if (socket?.connected && socket._doSubscribe) socket._doSubscribe();
   }, [myId]);
 
-  const [connected,         setConnected]         = useState(false);
-  const [rooms,             setRooms]             = useState<ConvRoom[]>([]);
-  const [activeRoomId,      setActiveRoomIdState] = useState<string | null>(null);
-  const [messages,          setMessages]          = useState<ChatMessage[]>([]);
-  const [typingUser,        setTypingUser]        = useState<string | null>(null);
-  const [inputText,         setInputText]         = useState("");
-  const [searchQ,           setSearchQ]           = useState("");
-  const [callInfo,          setCallInfo]          = useState<CallInfo>({ status: "idle" });
-  const [localStream,       setLocalStream]       = useState<MediaStream | null>(null);
-  const [remoteStream,      setRemoteStream]      = useState<MediaStream | null>(null);
-  const [isMuted,           setIsMuted]           = useState(false);
-  const [isCameraOff,       setIsCameraOff]       = useState(false);
-  const [callElapsed,       setCallElapsed]       = useState(0);
-  const [callError,         setCallError]         = useState<string | null>(null);
-  const [showSidebar,       setShowSidebar]       = useState(true);
-  const ringtoneRef         = useRef<any>(null);
+  const [connected,     setConnected]     = useState(false);
+  const [rooms,         setRooms]         = useState<ConvRoom[]>([]);
+  const [activeRoomId,  setActiveRoomIdState] = useState<string | null>(null);
+  const [messages,      setMessages]      = useState<ChatMessage[]>([]);
+  const [typingUser,    setTypingUser]    = useState<string | null>(null);
+  const [inputText,     setInputText]     = useState("");
+  const [searchQ,       setSearchQ]       = useState("");
+  const [callInfo,      setCallInfo]      = useState<CallInfo>({ status: "idle" });
+  const [localStream,   setLocalStream]   = useState<MediaStream | null>(null);
+  const [remoteStream,  setRemoteStream]  = useState<MediaStream | null>(null);
+  const [isMuted,       setIsMuted]       = useState(false);
+  const [isCameraOff,   setIsCameraOff]   = useState(false);
+  const [callElapsed,   setCallElapsed]   = useState(0);
+  const [callError,     setCallError]     = useState<string | null>(null);
+  const [showSidebar,   setShowSidebar]   = useState(true);
+  const ringtoneCtxRef  = useRef<AudioContext | null>(null);
 
   const setActiveRoomId = useCallback((id: string | null) => {
     activeRoomIdRef.current = id;
     setActiveRoomIdState(id);
   }, []);
 
-  const activeRoom = useMemo(() => rooms.find((r) => r.id === activeRoomId) ?? null, [rooms, activeRoomId]);
+  const activeRoom  = useMemo(() => rooms.find(r => r.id === activeRoomId) ?? null, [rooms, activeRoomId]);
   const totalUnread = useMemo(() => rooms.reduce((s, r) => s + r.unread, 0), [rooms]);
 
   useEffect(() => {
     if (callInfo.status !== "connected" && callInfo.status !== "voice_connected") {
       setCallElapsed(0); return;
     }
-    const t = setInterval(() => setCallElapsed((e) => e + 1), 1000);
+    const t = setInterval(() => setCallElapsed(e => e + 1), 1000);
     return () => clearInterval(t);
   }, [callInfo.status]);
 
@@ -373,43 +365,36 @@ export default function ChatPage() {
 
   useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, typingUser]);
 
-  /* ── WebRTC ── */
+  /* ── WebRTC helpers ── */
   const cleanupCall = useCallback(() => {
-    pcRef.current?.close();
-    pcRef.current = null;
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    pcRef.current?.close(); pcRef.current = null;
+    localStreamRef.current?.getTracks().forEach(t => t.stop());
     localStreamRef.current = null;
-    setLocalStream(null);
-    setRemoteStream(null);
-    remoteSocketRef.current = null;
-    icePendingRef.current = [];
-    setIsMuted(false);
-    setIsCameraOff(false);
+    setLocalStream(null); setRemoteStream(null);
+    remoteSocketRef.current = null; icePendingRef.current = [];
+    setIsMuted(false); setIsCameraOff(false);
   }, []);
 
   const getPC = useCallback((): RTCPeerConnection => {
     if (pcRef.current) {
-      const state = pcRef.current.connectionState;
-      if (state !== "closed" && state !== "failed" && state !== "disconnected") return pcRef.current;
-      pcRef.current.close();
-      pcRef.current = null;
+      const st = pcRef.current.connectionState;
+      if (st !== "closed" && st !== "failed" && st !== "disconnected") return pcRef.current;
+      pcRef.current.close(); pcRef.current = null;
     }
     const pc = new RTCPeerConnection(ICE_SERVERS);
     pcRef.current = pc;
-    pc.onicecandidate = (e) => {
-      if (e.candidate && remoteSocketRef.current && socketRef.current) {
+    pc.onicecandidate = e => {
+      if (e.candidate && remoteSocketRef.current && socketRef.current)
         socketRef.current.emit("webrtc_ice_candidate", {
           roomId: activeRoomIdRef.current,
           candidate: e.candidate.toJSON(),
           targetSocketId: remoteSocketRef.current,
         });
-      }
     };
-    pc.ontrack = (e) => setRemoteStream(e.streams[0]);
+    pc.ontrack = e => setRemoteStream(e.streams[0]);
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-        cleanupCall();
-        setCallInfo({ status: "ended" });
+        cleanupCall(); setCallInfo({ status: "ended" });
         setTimeout(() => setCallInfo({ status: "idle" }), 2500);
       }
     };
@@ -417,63 +402,80 @@ export default function ChatPage() {
   }, [cleanupCall]);
 
   const addTracksToPC = useCallback((pc: RTCPeerConnection, stream: MediaStream) => {
-    const existing = new Set(pc.getSenders().map((s) => s.track?.id));
-    stream.getTracks().forEach((track) => {
-      if (!existing.has(track.id)) pc.addTrack(track, stream);
-    });
+    const existing = new Set(pc.getSenders().map(s => s.track?.id));
+    stream.getTracks().forEach(track => { if (!existing.has(track.id)) pc.addTrack(track, stream); });
   }, []);
 
   const createAndSendOffer = useCallback(async (targetSocketId: string) => {
-    const pc    = getPC();
+    const pc = getPC();
+    if (localStreamRef.current) addTracksToPC(pc, localStreamRef.current);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socketRef.current?.emit("webrtc_offer", { roomId: activeRoomIdRef.current, offer, targetSocketId });
-  }, [getPC]);
+  }, [getPC, addTracksToPC]);
+
+  const startRingtone = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      ringtoneCtxRef.current = ctx;
+      const playBeep = (t: number) => {
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = "sine"; osc.frequency.setValueAtTime(480, t); osc.frequency.setValueAtTime(420, t + 0.4);
+        gain.gain.setValueAtTime(0.3, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+        osc.start(t); osc.stop(t + 0.8);
+      };
+      for (let i = 0; i < 3; i++) playBeep(ctx.currentTime + i * 1.5);
+    } catch {}
+  }, []);
+
+  const stopRingtone = useCallback(() => {
+    try { ringtoneCtxRef.current?.close(); ringtoneCtxRef.current = null; } catch {}
+  }, []);
 
   /* ── Socket setup ── */
   useEffect(() => {
     const socket = io("/chat", { transports: ["websocket", "polling"] });
     socketRef.current = socket;
 
+    // Subscribe as BOTH owner AND seeker — personal channels AND callChannel
     const doSubscribe = () => {
       const id   = myIdRef.current;
       const name = myNameRef.current;
-      // FIX: Do not subscribe if we don't have a real Clerk user ID yet.
-      // Previously this would subscribe with id="" which the server matched
-      // against ownerName, causing cross-account inbox pollution.
-      if (!id || !id.trim() || !socket.connected) return;
+      if (!id?.trim() || !socket.connected) return;
       socket.emit("owner_subscribe",  { ownerId:  id, ownerName:  name });
       socket.emit("seeker_subscribe", { seekerId: id, seekerName: name });
     };
 
-    socket.on("connect", () => { setConnected(true); doSubscribe(); });
-    socket.on("disconnect", () => setConnected(false));
+    socket.on("connect",    () => { setConnected(true);  doSubscribe(); });
+    socket.on("disconnect", () =>   setConnected(false));
     (socket as any)._doSubscribe = doSubscribe;
 
-    socket.on("owner_inbox", (data: { rooms: ConvRoom[] }) => {
-      setRooms((prev) => mergeRooms(prev, data.rooms.map((r) => ({ ...r, unread: 0 }))));
+    socket.on("owner_inbox",  (data: { rooms: ConvRoom[] }) => {
+      setRooms(prev => mergeRooms(prev, data.rooms.map(r => ({ ...r, unread: 0 }))));
     });
-
     socket.on("seeker_inbox", (data: { rooms: ConvRoom[] }) => {
-      setRooms((prev) => mergeRooms(prev, data.rooms.map((r) => ({ ...r, unread: 0 }))));
+      setRooms(prev => mergeRooms(prev, data.rooms.map(r => ({ ...r, unread: 0 }))));
     });
 
     socket.on("new_conversation", (data: { room: ConvRoom }) => {
-      setRooms((prev) => mergeRooms(prev, [{ ...data.room, unread: 1 }]));
+      setRooms(prev => mergeRooms(prev, [{ ...data.room, unread: 1 }]));
     });
 
+    // Always replace messages when room is joined (don't append stale history)
     socket.on("room_joined", (data: {
-      roomId: string; messages: ChatMessage[]; petPhoto?: string;
-      petId?: string; petName?: string; ownerId?: string; ownerName?: string;
+      roomId: string; messages: ChatMessage[];
+      petPhoto?: string; petId?: string; petName?: string;
+      ownerId?: string; ownerName?: string;
       seekerId?: string; seekerName?: string; seekerAvatar?: string;
     }) => {
-      setMessages(data.messages);
-      setRooms((prev) => {
-        const exists = prev.some((r) => r.id === data.roomId);
+      setMessages(data.messages ?? []);
+      setRooms(prev => {
+        const exists = prev.some(r => r.id === data.roomId);
         if (exists) {
-          return prev.map((r) =>
+          return prev.map(r =>
             r.id === data.roomId
-              ? { ...r, messages: data.messages, petPhoto: data.petPhoto ?? r.petPhoto, unread: 0 }
+              ? { ...r, messages: data.messages ?? [], petPhoto: data.petPhoto ?? r.petPhoto, unread: 0 }
               : r
           );
         }
@@ -489,7 +491,7 @@ export default function ChatPage() {
             seekerId:     data.seekerId   ?? myIdRef.current      ?? "",
             seekerName:   data.seekerName ?? myNameRef.current    ?? "",
             seekerAvatar: data.seekerAvatar ?? myAvatarRef.current ?? "",
-            messages:     data.messages,
+            messages:     data.messages ?? [],
             createdAt:    new Date().toISOString(),
             unread:       0,
           };
@@ -505,41 +507,51 @@ export default function ChatPage() {
 
     socket.on("new_message", (msg: ChatMessage) => {
       if (msg.roomId === activeRoomIdRef.current) {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === msg.id)) return prev;
+        setMessages(prev => {
+          if (prev.some(m => m.id === msg.id)) return prev;
           const optIdx = prev.findIndex(
-            (m) => m.id.startsWith("opt_") && m.senderId === msg.senderId &&
+            m => m.id.startsWith("opt_") && m.senderId === msg.senderId &&
               m.text === msg.text &&
               Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10000
           );
           if (optIdx !== -1) { const next = [...prev]; next[optIdx] = msg; return next; }
           return [...prev, msg];
         });
-        setRooms((prev) => prev.map((r) => r.id === msg.roomId ? { ...r, unread: 0 } : r));
+        setRooms(prev => prev.map(r => r.id === msg.roomId ? { ...r, unread: 0 } : r));
       } else {
-        setRooms((prev) =>
-          prev.map((r) => {
-            if (r.id !== msg.roomId) return r;
-            if (r.messages.some((m) => m.id === msg.id)) return r;
-            return { ...r, messages: [...r.messages, msg], unread: r.unread + 1 };
-          })
-        );
+        setRooms(prev => prev.map(r => {
+          if (r.id !== msg.roomId) return r;
+          if (r.messages.some(m => m.id === msg.id)) return r;
+          return { ...r, messages: [...r.messages, msg], unread: r.unread + 1 };
+        }));
       }
     });
 
+    // inbox_message arrives on personal channel — also update active chat window
     socket.on("inbox_message", (data: { roomId: string; message: ChatMessage }) => {
-      setRooms((prev) =>
-        prev.map((r) => {
-          if (r.id !== data.roomId) return r;
-          const already = r.messages.some((m) => m.id === data.message.id);
-          return { ...r, messages: already ? r.messages : [...r.messages, data.message] };
-        })
-      );
+      if (data.roomId === activeRoomIdRef.current) {
+        setMessages(prev => {
+          if (prev.some(m => m.id === data.message.id)) return prev;
+          const optIdx = prev.findIndex(
+            m => m.id.startsWith("opt_") && m.senderId === data.message.senderId &&
+              m.text === data.message.text &&
+              Math.abs(new Date(m.timestamp).getTime() - new Date(data.message.timestamp).getTime()) < 10000
+          );
+          if (optIdx !== -1) { const next = [...prev]; next[optIdx] = data.message; return next; }
+          return [...prev, data.message];
+        });
+      }
+      setRooms(prev => prev.map(r => {
+        if (r.id !== data.roomId) return r;
+        const already = r.messages.some(m => m.id === data.message.id);
+        return { ...r, messages: already ? r.messages : [...r.messages, data.message] };
+      }));
     });
 
     socket.on("user_typing",         ({ userName: n }: { userName: string }) => setTypingUser(n));
     socket.on("user_stopped_typing", () => setTypingUser(null));
 
+    // Call signals arrive on callChannel (single delivery, no duplicates)
     socket.on("incoming_call", (data: {
       roomId: string; callerId: string; callerName: string;
       callerAvatar: string; callType: "video" | "voice"; socketId: string;
@@ -547,29 +559,31 @@ export default function ChatPage() {
       remoteSocketRef.current = data.socketId;
       setCallInfo({ status: "incoming", callerName: data.callerName, callerAvatar: data.callerAvatar,
         callerId: data.callerId, callType: data.callType, remoteSocket: data.socketId });
-      startRingtoneRef.current();
+      startRingtone();
     });
 
     socket.on("call_accepted", async (data: {
       answererName: string; callType: "video" | "voice"; socketId: string;
     }) => {
-      stopRingtoneRef.current();
+      stopRingtone();
       remoteSocketRef.current = data.socketId;
-      setCallInfo((prev) => ({ ...prev,
+      setCallInfo(prev => ({
+        ...prev,
         status: data.callType === "voice" ? "voice_connected" : "connected",
-        remoteSocket: data.socketId, callType: data.callType }));
+        remoteSocket: data.socketId, callType: data.callType,
+      }));
       await createAndSendOffer(data.socketId);
     });
 
-    socket.on("call_rejected", () => { stopRingtoneRef.current(); setCallInfo({ status: "ended" }); setTimeout(() => setCallInfo({ status: "idle" }), 2500); cleanupCall(); });
-    socket.on("call_ended",    () => { stopRingtoneRef.current(); setCallInfo({ status: "ended" }); setTimeout(() => setCallInfo({ status: "idle" }), 2000);  cleanupCall(); });
+    socket.on("call_rejected", () => { stopRingtone(); setCallInfo({ status: "ended" }); setTimeout(() => setCallInfo({ status: "idle" }), 2500); cleanupCall(); });
+    socket.on("call_ended",    () => { stopRingtone(); setCallInfo({ status: "ended" }); setTimeout(() => setCallInfo({ status: "idle" }), 2000); cleanupCall(); });
 
     socket.on("webrtc_offer", async (data: { offer: RTCSessionDescriptionInit; fromSocketId: string }) => {
       remoteSocketRef.current = data.fromSocketId;
       const pc = getPC();
       if (localStreamRef.current) addTracksToPC(pc, localStreamRef.current);
       await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-      for (const c of icePendingRef.current) await pc.addIceCandidate(new RTCIceCandidate(c));
+      for (const c of icePendingRef.current) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.error);
       icePendingRef.current = [];
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
@@ -577,13 +591,17 @@ export default function ChatPage() {
     });
 
     socket.on("webrtc_answer", async (data: { answer: RTCSessionDescriptionInit }) => {
-      await pcRef.current?.setRemoteDescription(new RTCSessionDescription(data.answer));
+      const pc = pcRef.current;
+      if (!pc || pc.signalingState !== "have-local-offer") return;
+      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      for (const c of icePendingRef.current) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.error);
+      icePendingRef.current = [];
     });
 
     socket.on("webrtc_ice_candidate", async (data: { candidate: RTCIceCandidateInit }) => {
       const pc = pcRef.current;
       if (!pc || !pc.remoteDescription) { icePendingRef.current.push(data.candidate); return; }
-      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      await pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(console.error);
     });
 
     return () => { socket.disconnect(); cleanupCall(); };
@@ -595,19 +613,14 @@ export default function ChatPage() {
     setActiveRoomId(room.id);
     setMessages([]);
     setShowSidebar(false);
-    setRooms((prev) => prev.map((r) => (r.id === room.id ? { ...r, unread: 0 } : r)));
+    setRooms(prev => prev.map(r => r.id === room.id ? { ...r, unread: 0 } : r));
 
     const id   = myIdRef.current;
     const name = myNameRef.current;
     const av   = myAvatarRef.current;
-
-    // FIX: isOwner check uses ONLY Clerk user ID.
-    // Previously this also compared room.ownerName === name, which made any
-    // two users with the same display name appear as owners of each other's rooms.
     const isOwner = room.ownerId === id;
 
     if (isOwner) {
-      // FIX: send only ownerId — server no longer accepts ownerName for auth
       socketRef.current?.emit("owner_join_room", { roomId: room.id, ownerId: id });
     } else {
       socketRef.current?.emit("join_room", {
@@ -623,6 +636,12 @@ export default function ChatPage() {
     }
   }, [setActiveRoomId]);
 
+  // FIX BUG-14: reset autoOpenDoneRef when location.state changes so that
+  // navigating to /chat with a different pet always opens the correct chat.
+  useEffect(() => {
+    autoOpenDoneRef.current = false;
+  }, [location.state]);
+
   /* ── Auto-open from router state ── */
   useEffect(() => {
     const state    = location.state as { autoOpen?: any } | null;
@@ -632,7 +651,7 @@ export default function ChatPage() {
 
     autoOpenDoneRef.current = true;
     const roomId   = `pet_${autoOpen.petId}_seeker_${myId}`;
-    const existing = rooms.find((r) => r.id === roomId);
+    const existing = rooms.find(r => r.id === roomId);
 
     if (existing) {
       openRoom(existing);
@@ -643,7 +662,8 @@ export default function ChatPage() {
         petId:        autoOpen.petId,
         petName:      autoOpen.petName,
         petPhoto:     autoOpen.petPhoto ?? "",
-        ownerId:      autoOpen.ownerId,
+        // FIX: never use display name as ownerId — use "" if absent
+        ownerId:      autoOpen.ownerId ?? "",
         ownerName:    autoOpen.ownerName,
         seekerId:     myId,
         seekerName:   myNameRef.current,
@@ -659,9 +679,13 @@ export default function ChatPage() {
     const roomId = activeRoomIdRef.current;
     const socket = socketRef.current;
     if (!text || !roomId || !socket) return;
-
-    const senderId = myIdRef.current || "guest";
-    const optimisticMsg = {
+    // ROOT CAUSE FIX: never fall back to "guest" — server will drop it
+    const senderId = myIdRef.current?.trim();
+    if (!senderId) {
+      console.warn("[Chat] sendMessage: userId not ready yet");
+      return;
+    }
+    const optimistic = {
       id:           `opt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       roomId,
       senderId,
@@ -671,7 +695,7 @@ export default function ChatPage() {
       timestamp:    new Date().toISOString(),
       type:         "text" as const,
     };
-    setMessages((prev) => [...prev, optimisticMsg]);
+    setMessages(prev => [...prev, optimistic]);
     socket.emit("send_message", { roomId, senderId, senderName: myNameRef.current, senderAvatar: myAvatarRef.current, text });
     setInputText("");
     socket.emit("typing_stop", { roomId });
@@ -694,39 +718,14 @@ export default function ChatPage() {
     try {
       return await navigator.mediaDevices.getUserMedia({ video, audio: true });
     } catch (err: any) {
-      const name = err?.name ?? "";
-      if (name === "NotAllowedError" || name === "PermissionDeniedError")
-        throw new Error("Microphone permission denied. Please allow access in your browser settings.");
-      if (name === "NotFoundError")
+      const n = err?.name ?? "";
+      if (n === "NotAllowedError" || n === "PermissionDeniedError")
+        throw new Error("Microphone permission denied. Please allow access in browser settings.");
+      if (n === "NotFoundError")
         throw new Error("No microphone found. Please connect a microphone and try again.");
       throw new Error("Could not access microphone. Please check browser permissions.");
     }
   }
-
-  const startRingtoneRef = useRef<() => void>(() => {});
-  const stopRingtoneRef  = useRef<() => void>(() => {});
-
-  const startRingtone = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const playBeep = (t: number) => {
-        const osc = ctx.createOscillator(); const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.type = "sine"; osc.frequency.setValueAtTime(480, t); osc.frequency.setValueAtTime(420, t + 0.4);
-        gain.gain.setValueAtTime(0.3, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
-        osc.start(t); osc.stop(t + 0.8);
-      };
-      for (let i = 0; i < 3; i++) playBeep(ctx.currentTime + i * 1.5);
-      ringtoneRef.current = ctx;
-    } catch {}
-  }, []);
-
-  const stopRingtone = useCallback(() => {
-    try { ringtoneRef.current?.close(); ringtoneRef.current = null; } catch {}
-  }, []);
-
-  useEffect(() => { startRingtoneRef.current = startRingtone; }, [startRingtone]);
-  useEffect(() => { stopRingtoneRef.current  = stopRingtone;  }, [stopRingtone]);
 
   const startCall = useCallback(async (type: "video" | "voice") => {
     if (!activeRoomIdRef.current) return;
@@ -744,9 +743,10 @@ export default function ChatPage() {
         callerAvatar: myAvatarRef.current, callType: type,
       });
     } catch (err: any) {
-      setCallError(err?.message ?? "Could not start call. Check microphone permissions.");
+      setCallError(err?.message ?? "Could not start call.");
       cleanupCall();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getPC, addTracksToPC, startRingtone, cleanupCall]);
 
   const acceptCall = useCallback(async (type: "video" | "voice") => {
@@ -755,7 +755,7 @@ export default function ChatPage() {
       const stream = await acquireMedia(type === "video");
       localStreamRef.current = stream; setLocalStream(stream);
       const pc = getPC(); addTracksToPC(pc, stream);
-      setCallInfo((prev) => ({ ...prev, status: type === "voice" ? "voice_connected" : "connected", callType: type }));
+      setCallInfo(prev => ({ ...prev, status: type === "voice" ? "voice_connected" : "connected", callType: type }));
       socketRef.current?.emit("call_accepted", {
         roomId: activeRoomIdRef.current, callerId: callInfo.callerId,
         answererName: myNameRef.current, callType: type,
@@ -765,26 +765,33 @@ export default function ChatPage() {
       socketRef.current?.emit("call_rejected", { roomId: activeRoomIdRef.current, reason: "Permission denied" });
       setCallInfo({ status: "idle" });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callInfo.callerId, getPC, addTracksToPC, stopRingtone]);
 
   const rejectCall = useCallback(() => {
     stopRingtone();
-    socketRef.current?.emit("call_rejected", { roomId: activeRoomIdRef.current });
+    socketRef.current?.emit("call_rejected", {
+      roomId: activeRoomIdRef.current,
+      // BUG-H FIX: include our userId so server can route without socketUserMap
+      callerId: myIdRef.current,
+    });
     setCallInfo({ status: "idle" });
   }, [stopRingtone]);
 
   const endCall = useCallback(() => {
     stopRingtone();
-    socketRef.current?.emit("call_ended", { roomId: activeRoomIdRef.current });
-    cleanupCall();
-    setCallInfo({ status: "idle" });
+    socketRef.current?.emit("call_ended", {
+      roomId: activeRoomIdRef.current,
+      // BUG-H FIX: include our userId so server can route without socketUserMap
+      callerId: myIdRef.current,
+    });
+    cleanupCall(); setCallInfo({ status: "idle" });
   }, [cleanupCall, stopRingtone]);
 
   const toggleMute = useCallback(() => {
     const t = localStreamRef.current?.getAudioTracks()[0];
     if (t) { t.enabled = !t.enabled; setIsMuted(!t.enabled); }
   }, []);
-
   const toggleCamera = useCallback(() => {
     const t = localStreamRef.current?.getVideoTracks()[0];
     if (t) { t.enabled = !t.enabled; setIsCameraOff(!t.enabled); }
@@ -794,7 +801,7 @@ export default function ChatPage() {
   const callActive = ["calling","voice_calling","connected","voice_connected"].includes(callInfo.status);
 
   const filteredRooms = useMemo(() =>
-    rooms.filter((r) =>
+    rooms.filter(r =>
       !searchQ ||
       r.seekerName.toLowerCase().includes(searchQ.toLowerCase()) ||
       r.ownerName.toLowerCase().includes(searchQ.toLowerCase()) ||
@@ -803,8 +810,7 @@ export default function ChatPage() {
     [rooms, searchQ]
   );
 
-  // FIX: otherName uses ownerId === myId comparison (ID-only, never name)
-  // Previously: room.ownerName === myName — broken for same-named users
+  // Use ID-only comparison for determining other party's name
   const otherName = activeRoom
     ? (activeRoom.ownerId === myId ? activeRoom.seekerName : activeRoom.ownerName)
     : "";
@@ -851,9 +857,11 @@ export default function ChatPage() {
             style={{ height: "calc(100vh - 272px)", minHeight: 520 }}>
 
             {/* ════ SIDEBAR ════ */}
-            <div className={cn("flex-shrink-0 border-r border-gray-100 flex flex-col",
+            <div className={cn(
+              "flex-shrink-0 border-r border-gray-100 flex flex-col",
               "w-full sm:w-80 lg:w-96",
-              !showSidebar && activeRoom ? "hidden sm:flex" : "flex")}>
+              !showSidebar && activeRoom ? "hidden sm:flex" : "flex"
+            )}>
               <div className="px-5 py-4 border-b border-gray-100 flex-shrink-0">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -870,10 +878,9 @@ export default function ChatPage() {
                 </div>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                  <input value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
+                  <input value={searchQ} onChange={e => setSearchQ(e.target.value)}
                     placeholder="Search conversations…"
-                    className="w-full pl-9 pr-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
+                    className="w-full pl-9 pr-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400" />
                 </div>
               </div>
 
@@ -884,9 +891,7 @@ export default function ChatPage() {
                       <Users className="w-7 h-7 text-orange-300" />
                     </div>
                     <p className="font-bold text-gray-800">Sign in to chat</p>
-                    <Link to="/signin" className="px-5 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 transition-colors">
-                      Sign In
-                    </Link>
+                    <Link to="/signin" className="px-5 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 transition-colors">Sign In</Link>
                   </div>
                 ) : filteredRooms.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-6 py-12">
@@ -905,13 +910,11 @@ export default function ChatPage() {
                   </div>
                 ) : (
                   filteredRooms.map((room, i) => {
-                    const last    = room.messages.length > 0 ? room.messages[room.messages.length - 1] : undefined;
+                    const last     = room.messages.length > 0 ? room.messages[room.messages.length - 1] : undefined;
                     const isActive = room.id === activeRoomId;
-
-                    // FIX: isOwner is ID-only — never compares display names
-                    const amOwner     = room.ownerId === myId;
-                    const other       = amOwner ? room.seekerName : room.ownerName;
-                    const otherAvatar = amOwner ? room.seekerAvatar : undefined;
+                    const amOwner  = room.ownerId === myId;
+                    const other    = amOwner ? room.seekerName : room.ownerName;
+                    const otherAv  = amOwner ? room.seekerAvatar : undefined;
 
                     return (
                       <div key={room.id}
@@ -922,7 +925,7 @@ export default function ChatPage() {
                         <div className="relative flex-shrink-0">
                           <PetAv photo={room.petPhoto} name={room.petName} cls="w-12 h-12" />
                           <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-2 border-white overflow-hidden">
-                            <Av src={otherAvatar} name={other} size={6} />
+                            <Av src={otherAv} name={other} size={6} />
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
@@ -991,7 +994,6 @@ export default function ChatPage() {
                     <PetAv photo={activeRoom.petPhoto} name={activeRoom.petName} cls="w-10 h-10" />
                     <div className="flex-1 min-w-0">
                       <p className="font-black text-gray-900 text-sm truncate">{otherName}</p>
-                      {/* FIX: label uses ID comparison, not name comparison */}
                       <p className="text-xs text-orange-500 font-semibold truncate">
                         {activeRoom.ownerId === myId ? "Interested in " : "Owner of "}{activeRoom.petName}
                       </p>
@@ -1016,7 +1018,6 @@ export default function ChatPage() {
                       <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-10 anim-fadeUp">
                         <PetAv photo={activeRoom.petPhoto} name={activeRoom.petName} cls="w-16 h-16 shadow-md" />
                         <div>
-                          {/* FIX: welcome message uses ID comparison */}
                           <p className="font-bold text-gray-800 text-sm">
                             {activeRoom.ownerId === myId
                               ? `${activeRoom.seekerName} is interested in ${activeRoom.petName}!`
@@ -1025,15 +1026,12 @@ export default function ChatPage() {
                           <p className="text-xs text-gray-400 mt-1">Say hello to get started 👋</p>
                         </div>
                         <div className="flex flex-wrap gap-2 justify-center">
-                          {/* FIX: suggestions use ID comparison */}
                           {(activeRoom.ownerId === myId
                             ? [`Hi ${activeRoom.seekerName}! Thanks for your interest 🐾`, "Happy to answer any questions!", "Would you like to schedule a meeting?"]
                             : [`Hi! I'm interested in ${activeRoom.petName} 🐾`, "Can you share more details?", "Is the pet still available?"]
-                          ).map((s) => (
+                          ).map(s => (
                             <button key={s} onClick={() => setInputText(s)}
-                              className="text-xs px-3 py-1.5 rounded-full bg-orange-100 text-orange-700 font-medium hover:bg-orange-200 transition-colors">
-                              {s}
-                            </button>
+                              className="text-xs px-3 py-1.5 rounded-full bg-orange-100 text-orange-700 font-medium hover:bg-orange-200 transition-colors">{s}</button>
                           ))}
                         </div>
                       </div>
@@ -1070,7 +1068,7 @@ export default function ChatPage() {
                         <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-sm flex-shrink-0">🐾</div>
                         <div className="bubble-them px-4 py-3 flex items-center gap-1 shadow-sm">
                           <span className="text-xs text-gray-400 mr-1.5">{typingUser}</span>
-                          {[0, 1, 2].map((i) => <div key={i} className="typing-dot w-1.5 h-1.5 rounded-full bg-orange-400" />)}
+                          {[0, 1, 2].map(i => <div key={i} className="typing-dot w-1.5 h-1.5 rounded-full bg-orange-400" />)}
                         </div>
                       </div>
                     )}
@@ -1081,10 +1079,9 @@ export default function ChatPage() {
                   <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 bg-white/90">
                     <div className="flex items-center gap-2.5">
                       <input ref={inputRef} value={inputText} onChange={handleInputChange}
-                        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
                         placeholder={`Message ${otherName}…`}
-                        className="flex-1 px-4 py-3 text-sm bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent placeholder:text-gray-400"
-                      />
+                        className="flex-1 px-4 py-3 text-sm bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent placeholder:text-gray-400" />
                       <button onClick={sendMessage} disabled={!inputText.trim()}
                         className={cn("send-btn w-11 h-11 rounded-2xl flex items-center justify-center",
                           inputText.trim() ? "bg-gradient-to-br from-orange-500 to-amber-400 text-white shadow-md shadow-orange-200" : "bg-gray-100 text-gray-400 cursor-not-allowed")}>

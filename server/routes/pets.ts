@@ -9,6 +9,10 @@ const normalizePet = (pet: any) => {
   return {
     ...p,
     id:           p.id ? p.id.toString() : p._id?.toString(),
+    // ROOT CAUSE FIX: expose ownerClerkId so the client can use it as ownerId
+    // in chat room creation. Previously this field didn't exist → ownerId was
+    // always "" or a display name → isRoomMember() blocked all owner messages.
+    ownerClerkId: p.ownerClerkId || "",
     ownerAvatar:  p.ownerAvatar || (p.species === "cat" ? "🐱" : "🐕"),
     traits:       p.traits       || [],
     healthCerts:  p.healthCerts  || [],
@@ -48,18 +52,21 @@ router.post("/", async (req, res) => {
 
     const pet = await Pet.create({
       ...data,
-      owner:        data.owner       || "You",
-      ownerAvatar:  data.ownerAvatar || "🧑",
-      ownerVerified:data.ownerVerified || false,
-      vaccinated:   data.vaccinated  ?? true,
-      pedigree:     data.pedigree    ?? false,
-      fallbackEmoji:data.fallbackEmoji || (data.species === "cat" ? "🐱" : "🐕"),
-      traits:       data.traits      || [],
-      weight:       data.weight      || "—",
-      color:        data.color       || "—",
-      score:        data.score       ?? 0,
-      healthCerts:  data.healthCerts || [],
-      joinedDate:   data.joinedDate  || new Date().toLocaleDateString("en-US", {
+      owner:         data.owner        || "You",
+      // ROOT CAUSE FIX: persist the Clerk user ID alongside the display name.
+      // The client sends this as ownerClerkId from user?.id.
+      ownerClerkId:  data.ownerClerkId || "",
+      ownerAvatar:   data.ownerAvatar  || "🧑",
+      ownerVerified: data.ownerVerified || false,
+      vaccinated:    data.vaccinated   ?? true,
+      pedigree:      data.pedigree     ?? false,
+      fallbackEmoji: data.fallbackEmoji || (data.species === "cat" ? "🐱" : "🐕"),
+      traits:        data.traits       || [],
+      weight:        data.weight       || "—",
+      color:         data.color        || "—",
+      score:         data.score        ?? 0,
+      healthCerts:   data.healthCerts  || [],
+      joinedDate:    data.joinedDate   || new Date().toLocaleDateString("en-US", {
         month: "short",
         year:  "numeric",
       }),
@@ -67,8 +74,6 @@ router.post("/", async (req, res) => {
 
     const normalized = normalizePet(pet);
 
-    // BUG FIX: use getIO() at call time so we always get the live io instance
-    // even though this module is imported before attachSocketServer() runs.
     const io = getIO();
     if (io) {
       io.emit("new_pet", normalized);

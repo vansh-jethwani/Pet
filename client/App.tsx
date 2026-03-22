@@ -12,6 +12,8 @@ import Community from "./pages/Community";
 import Chat from "./pages/Chat";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
+// FIX: VetSignUp page exists but was never registered as a route
+import VetSignUp from "./pages/VetSignUp";
 import DogsCategory from "./pages/categories/DogsCategory";
 import CatsCategory from "./pages/categories/CatsCategory";
 import FishCategory from "./pages/categories/FishCategory";
@@ -22,23 +24,25 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/"          element={<Home />} />
-        <Route path="/signin"    element={<SignIn />} />
-        <Route path="/signup"    element={<SignUp />} />
-        <Route path="/chat"      element={<Chat />} />
+        <Route path="/dashboard"  element={<Dashboard />} />
+        <Route path="/"           element={<Home />} />
+        <Route path="/signin"     element={<SignIn />} />
+        <Route path="/signup"     element={<SignUp />} />
+        {/* FIX: added missing /vet-signup route */}
+        <Route path="/vet-signup" element={<VetSignUp />} />
+        <Route path="/chat"       element={<Chat />} />
         <Route path="/category/dogs"  element={<DogsCategory />} />
         <Route path="/category/cats"  element={<CatsCategory />} />
         <Route path="/category/fish"  element={<FishCategory />} />
         <Route path="/category/birds" element={<BirdsCategory />} />
-        <Route path="/breeding"   element={<Breeding />} />
-        <Route path="/adoption"   element={<Adoption />} />
-        <Route path="/hosting"    element={<Hosting />} />
+        <Route path="/breeding"    element={<Breeding />} />
+        <Route path="/adoption"    element={<Adoption />} />
+        <Route path="/hosting"     element={<Hosting />} />
         <Route path="/marketplace" element={<Marketplace />} />
-        <Route path="/vets"       element={<Vets />} />
-        <Route path="/insurance"  element={<Insurance />} />
-        <Route path="/store"      element={<Store />} />
-        <Route path="/community"  element={<Community />} />
+        <Route path="/vets"        element={<Vets />} />
+        <Route path="/insurance"   element={<Insurance />} />
+        <Route path="/store"       element={<Store />} />
+        <Route path="/community"   element={<Community />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
