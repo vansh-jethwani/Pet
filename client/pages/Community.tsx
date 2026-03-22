@@ -7,17 +7,17 @@ import type { Post, Reply, PostCategory, CreatePostBody } from "@shared/api";
 import {
   Heart, MessageSquare, Eye, Plus, Search, Filter, X,
   Send, ChevronDown, ChevronUp, Flame, Clock, TrendingUp,
-  Tag, Loader2, AlertCircle, RefreshCw, Wifi, WifiOff,
+  Tag, Loader2, AlertCircle, RefreshCw, Wifi, WifiOff, CornerDownRight,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Category = "all" | PostCategory;
-type SortBy = "recent" | "popular" | "trending";
+type SortBy   = "recent" | "popular" | "trending";
 
 interface PostWithLiked extends Post {
   likedByMe: boolean;
-  replies: ReplyWithLiked[];
+  replies:   ReplyWithLiked[];
 }
 interface ReplyWithLiked extends Reply {
   likedByMe: boolean;
@@ -54,14 +54,43 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// ─── Render reply content with @mention highlighted ───────────────────────────
+
+function ReplyContent({ content }: { content: string }) {
+  // Match a leading @mention like "@Vansh " at the start of the string
+  const match = content.match(/^(@\S+)\s([\s\S]*)$/);
+  if (match) {
+    return (
+      <p className="text-gray-700 text-sm leading-relaxed">
+        <span className="text-orange-500 font-bold">{match[1]}</span>{" "}
+        {match[2]}
+      </p>
+    );
+  }
+  return <p className="text-gray-700 text-sm leading-relaxed">{content}</p>;
+}
+
 // ─── ReplyItem ────────────────────────────────────────────────────────────────
 
-function ReplyItem({ reply, onLike }: { reply: ReplyWithLiked; onLike: (id: string) => void }) {
+function ReplyItem({
+  reply,
+  onLike,
+  onReplyTo,
+  isNested = false,
+}: {
+  reply:      ReplyWithLiked;
+  onLike:     (id: string) => void;
+  onReplyTo:  (replyId: string, author: string) => void;
+  isNested?:  boolean;
+}) {
   return (
-    <div className="flex gap-3 py-3">
-      <div className="text-2xl flex-shrink-0">{reply.avatar}</div>
+    <div className={cn("flex gap-3 py-3", isNested && "pl-8 border-l-2 border-orange-100 ml-4")}>
+      {/* Avatar */}
+      <div className="text-xl flex-shrink-0 mt-0.5">{reply.avatar}</div>
+
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
+        {/* Header */}
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
           <span className="font-semibold text-gray-900 text-sm">{reply.author}</span>
           <span className="text-xs text-gray-400">
             {new Date(reply.createdAt).toLocaleString("en-IN", {
@@ -69,16 +98,35 @@ function ReplyItem({ reply, onLike }: { reply: ReplyWithLiked; onLike: (id: stri
             })}
           </span>
         </div>
-        <p className="text-gray-700 text-sm leading-relaxed">{reply.content}</p>
-        <button
-          onClick={() => onLike(reply.id)}
-          className={cn(
-            "mt-2 flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors",
-            reply.likedByMe ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-          )}
-        >
-          <Heart className="w-3 h-3 fill-current" />{reply.likes}
-        </button>
+
+        {/* Content — highlights @mention if present */}
+        <ReplyContent content={reply.content} />
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 mt-2">
+          {/* Like */}
+          <button
+            onClick={() => onLike(reply.id)}
+            className={cn(
+              "flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors",
+              reply.likedByMe
+                ? "bg-red-100 text-red-600"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+            )}
+          >
+            <Heart className="w-3 h-3 fill-current" />
+            {reply.likes}
+          </button>
+
+          {/* Reply to this reply */}
+          <button
+            onClick={() => onReplyTo(reply.id, reply.author)}
+            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 hover:bg-orange-100 hover:text-orange-600 transition-colors"
+          >
+            <CornerDownRight className="w-3 h-3" />
+            Reply
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -87,39 +135,83 @@ function ReplyItem({ reply, onLike }: { reply: ReplyWithLiked; onLike: (id: stri
 // ─── PostCard ─────────────────────────────────────────────────────────────────
 
 function PostCard({
-  post, onLikePost, onLikeReply, onAddReply, onExpand,
+  post, currentUserId, currentUserName,
+  onLikePost, onLikeReply, onAddReply, onExpand,
 }: {
-  post: PostWithLiked;
-  onLikePost: (id: string, liked: boolean) => void;
+  post:            PostWithLiked;
+  currentUserId:   string;
+  currentUserName: string;
+  onLikePost:  (id: string, liked: boolean) => void;
   onLikeReply: (postId: string, replyId: string, liked: boolean) => void;
-  onAddReply: (postId: string, content: string) => Promise<void>;
-  onExpand: (id: string) => void;
+  onAddReply:  (postId: string, content: string) => Promise<void>;
+  onExpand:    (id: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded,       setExpanded]       = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
-  const [replyText, setReplyText] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [replyText,      setReplyText]      = useState("");
+  const [submitting,     setSubmitting]     = useState(false);
+
+  // Which reply we are responding to (null = replying to post directly)
+  const [replyingTo, setReplyingTo] = useState<{ id: string; author: string } | null>(null);
+
+  const replyInputRef = useRef<HTMLTextAreaElement>(null);
   const meta = CATEGORY_META[post.category];
 
   const handleToggleExpand = () => {
     if (!expanded) onExpand(post.id);
-    setExpanded((e) => !e);
+    setExpanded(e => !e);
     setShowReplyInput(false);
+    setReplyingTo(null);
+  };
+
+  // Opens the reply box for the whole post
+  const handleOpenPostReply = () => {
+    setReplyingTo(null);
+    setReplyText("");
+    setShowReplyInput(true);
+    setExpanded(true);
+    setTimeout(() => replyInputRef.current?.focus(), 50);
+  };
+
+  // Opens the reply box pre-filled with @mention for a specific reply
+  const handleReplyTo = (replyId: string, author: string) => {
+    setReplyingTo({ id: replyId, author });
+    setReplyText(`@${author} `);
+    setShowReplyInput(true);
+    setExpanded(true);
+    setTimeout(() => {
+      if (replyInputRef.current) {
+        replyInputRef.current.focus();
+        // Place cursor at end
+        const len = replyInputRef.current.value.length;
+        replyInputRef.current.setSelectionRange(len, len);
+      }
+    }, 50);
+  };
+
+  const handleCancelReply = () => {
+    setShowReplyInput(false);
+    setReplyText("");
+    setReplyingTo(null);
   };
 
   const handleSubmitReply = async () => {
     const trimmed = replyText.trim();
     if (!trimmed || submitting) return;
+    // Don't allow submitting just "@Author" with nothing after it
+    if (replyingTo && trimmed === `@${replyingTo.author}`) return;
     setSubmitting(true);
     await onAddReply(post.id, trimmed);
     setReplyText("");
     setShowReplyInput(false);
+    setReplyingTo(null);
     setExpanded(true);
     setSubmitting(false);
   };
 
   return (
     <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-gray-100">
+      {/* Post body */}
       <div className="p-6">
         <div className="flex items-start gap-4 mb-4">
           <div className="text-3xl flex-shrink-0">{post.avatar}</div>
@@ -144,7 +236,7 @@ function PostCard({
         <p className="text-gray-600 leading-relaxed text-sm">{post.content}</p>
         {post.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-4">
-            {post.tags.map((tag) => (
+            {post.tags.map(tag => (
               <span key={tag} className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full text-xs font-medium">
                 <Tag className="w-3 h-3" />{tag}
               </span>
@@ -153,6 +245,7 @@ function PostCard({
         )}
       </div>
 
+      {/* Action bar */}
       <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-4 text-sm text-gray-500">
           <button onClick={handleToggleExpand} className="flex items-center gap-1.5 hover:text-orange-500 transition-colors font-medium">
@@ -175,7 +268,7 @@ function PostCard({
             <Heart className="w-4 h-4 fill-current" />{post.likes}
           </button>
           <button
-            onClick={() => { setShowReplyInput((s) => !s); if (!showReplyInput) setExpanded(true); }}
+            onClick={handleOpenPostReply}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-orange-100 text-orange-600 hover:bg-orange-200 transition-colors"
           >
             <MessageSquare className="w-4 h-4" />Reply
@@ -183,43 +276,96 @@ function PostCard({
         </div>
       </div>
 
+      {/* Replies + inline reply input */}
       {(expanded || showReplyInput) && (
         <div className="px-6 pb-4 border-t border-gray-100">
+
+          {/* Inline reply composer */}
           {showReplyInput && (
             <div className="flex gap-3 pt-4 pb-2">
-              <div className="text-2xl">🐾</div>
+              <div className="text-2xl flex-shrink-0">🐾</div>
               <div className="flex-1">
+                {/* Context label showing who we're replying to */}
+                {replyingTo && (
+                  <div className="flex items-center gap-1.5 mb-1.5 text-xs text-orange-600 font-semibold">
+                    <CornerDownRight className="w-3 h-3" />
+                    Replying to <span className="font-bold">@{replyingTo.author}</span>
+                    <button
+                      onClick={() => {
+                        setReplyingTo(null);
+                        setReplyText("");
+                      }}
+                      className="ml-1 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
                 <textarea
+                  ref={replyInputRef}
                   value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  placeholder="Write a reply..."
+                  onChange={e => setReplyText(e.target.value)}
+                  placeholder={
+                    replyingTo
+                      ? `Reply to @${replyingTo.author}…`
+                      : "Write a reply to this post…"
+                  }
                   rows={2}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none"
-                  onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmitReply(); }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmitReply();
+                  }}
                 />
-                <div className="flex justify-end gap-2 mt-2">
-                  <button onClick={() => { setShowReplyInput(false); setReplyText(""); }} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 font-medium">
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSubmitReply}
-                    disabled={!replyText.trim() || submitting}
-                    className="flex items-center gap-1.5 px-4 py-1.5 bg-orange-500 text-white text-sm font-semibold rounded-lg hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                    Post Reply
-                  </button>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-[11px] text-gray-400">Ctrl+Enter to post</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCancelReply}
+                      className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSubmitReply}
+                      disabled={
+                        !replyText.trim() ||
+                        submitting ||
+                        (!!replyingTo && replyText.trim() === `@${replyingTo.author}`)
+                      }
+                      className="flex items-center gap-1.5 px-4 py-1.5 bg-orange-500 text-white text-sm font-semibold rounded-lg hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {submitting
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <Send className="w-3.5 h-3.5" />
+                      }
+                      {replyingTo ? "Post Reply" : "Post Reply"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           )}
+
+          {/* Reply list */}
           {expanded && post.replies.length > 0 && (
             <div className="divide-y divide-gray-100 mt-1">
-              {post.replies.map((reply) => (
-                <ReplyItem key={reply.id} reply={reply} onLike={(rid) => onLikeReply(post.id, rid, reply.likedByMe)} />
-              ))}
+              {post.replies.map(reply => {
+                // A reply is "nested" (visually indented) when its content
+                // starts with @SomeAuthor — meaning it's a reply-to-reply
+                const isNested = /^@\S+\s/.test(reply.content);
+                return (
+                  <ReplyItem
+                    key={reply.id}
+                    reply={reply}
+                    onLike={rid => onLikeReply(post.id, rid, reply.likedByMe)}
+                    onReplyTo={handleReplyTo}
+                    isNested={isNested}
+                  />
+                );
+              })}
             </div>
           )}
+
           {expanded && post.replies.length === 0 && !showReplyInput && (
             <p className="text-sm text-gray-400 text-center py-4">No replies yet — be the first!</p>
           )}
@@ -232,26 +378,26 @@ function PostCard({
 // ─── NewPostModal ─────────────────────────────────────────────────────────────
 
 function NewPostModal({ onClose, onSubmit }: {
-  onClose: () => void;
+  onClose:  () => void;
   onSubmit: (data: CreatePostBody) => Promise<void>;
 }) {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [category, setCategory] = useState<PostCategory>("tips");
-  const [tagsInput, setTagsInput] = useState("");
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [title,      setTitle]      = useState("");
+  const [content,    setContent]    = useState("");
+  const [category,   setCategory]   = useState<PostCategory>("tips");
+  const [tagsInput,  setTagsInput]  = useState("");
+  const [errors,     setErrors]     = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     const e: Record<string, string> = {};
-    if (!title.trim()) e.title = "Title is required";
+    if (!title.trim())   e.title   = "Title is required";
     if (!content.trim()) e.content = "Content is required";
     setErrors(e);
     if (Object.keys(e).length > 0 || submitting) return;
 
     setSubmitting(true);
     try {
-      const tags = tagsInput.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+      const tags = tagsInput.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
       await onSubmit({ author: "You", avatar: "🐾", category, title: title.trim(), content: content.trim(), tags });
     } catch (err) {
       console.error(err);
@@ -284,7 +430,7 @@ function NewPostModal({ onClose, onSubmit }: {
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">Title</label>
             <input value={title}
-              onChange={(e) => { setTitle(e.target.value); if (errors.title) setErrors((p) => ({ ...p, title: "" })); }}
+              onChange={e => { setTitle(e.target.value); if (errors.title) setErrors(p => ({ ...p, title: "" })); }}
               placeholder="Give your post a clear, descriptive title..."
               className={cn("w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent",
                 errors.title ? "border-red-400 bg-red-50" : "border-gray-200")}
@@ -294,7 +440,7 @@ function NewPostModal({ onClose, onSubmit }: {
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">Content</label>
             <textarea value={content} rows={5}
-              onChange={(e) => { setContent(e.target.value); if (errors.content) setErrors((p) => ({ ...p, content: "" })); }}
+              onChange={e => { setContent(e.target.value); if (errors.content) setErrors(p => ({ ...p, content: "" })); }}
               placeholder="Share your story, question, tip, or event details..."
               className={cn("w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none",
                 errors.content ? "border-red-400 bg-red-50" : "border-gray-200")}
@@ -305,7 +451,7 @@ function NewPostModal({ onClose, onSubmit }: {
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Tags <span className="text-gray-400 font-normal">(optional, comma-separated)</span>
             </label>
-            <input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)}
+            <input value={tagsInput} onChange={e => setTagsInput(e.target.value)}
               placeholder="e.g. dogs, training, behaviour"
               className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
             />
@@ -331,30 +477,30 @@ function NewPostModal({ onClose, onSubmit }: {
 
 export default function Community() {
   const { user } = useUser();
-  const currentAuthor = user?.firstName || user?.fullName || "You";
+  const currentAuthor  = user?.firstName || user?.fullName || "You";
+  const currentClerkId = user?.id ?? "";
 
-  const [posts, setPosts] = useState<PostWithLiked[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [posts,            setPosts]            = useState<PostWithLiked[]>([]);
+  const [loading,          setLoading]          = useState(true);
+  const [error,            setError]            = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Category>("all");
-  const [sortBy, setSortBy] = useState<SortBy>("recent");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showNewPost, setShowNewPost] = useState(false);
+  const [sortBy,           setSortBy]           = useState<SortBy>("recent");
+  const [searchTerm,       setSearchTerm]       = useState("");
+  const [showNewPost,      setShowNewPost]       = useState(false);
 
-  // ── Socket.io connection state ──
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
-  // ── Initial data load ──
+  // ── Initial data load ──────────────────────────────────────────────────────
   const loadPosts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await apiFetch<Post[]>(`${API}/posts`);
-      setPosts(data.map((p) => ({
+      setPosts(data.map(p => ({
         ...p,
         likedByMe: false,
-        replies: p.replies.map((r) => ({ ...r, likedByMe: false })),
+        replies:   p.replies.map(r => ({ ...r, likedByMe: false })),
       })));
     } catch (e: any) {
       setError(e.message || "Failed to load posts");
@@ -363,141 +509,106 @@ export default function Community() {
     }
   }, []);
 
-  useEffect(() => {
-    loadPosts();
-  }, [loadPosts]);
+  useEffect(() => { loadPosts(); }, [loadPosts]);
 
-  // ── Socket.io: connect once on mount, clean up on unmount ──
+  // ── Socket.io ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    // Connect to the same origin — Socket.io auto-detects the path
     const socket = socketIO(window.location.origin, {
-      path: "/socket.io",
-      transports: ["websocket", "polling"], // try WebSocket first, fall back to polling
+      path:       "/socket.io",
+      transports: ["websocket", "polling"],
     });
-
     socketRef.current = socket;
 
-    // ── Connection lifecycle ──
-    socket.on("connect", () => {
-      console.log("🔌 Socket.io connected:", socket.id);
-      setIsConnected(true);
-    });
+    socket.on("connect",    () => setIsConnected(true));
+    socket.on("disconnect", () => setIsConnected(false));
 
-    socket.on("disconnect", () => {
-      console.log("❌ Socket.io disconnected");
-      setIsConnected(false);
-    });
-
-    // ── Real-time event: a new post was created by any user ──
     socket.on("new_post", (newPost: Post) => {
-      setPosts((prev) => {
-        // Avoid duplicates (the author's own post is already added optimistically)
-        if (prev.some((p) => p.id === newPost.id)) return prev;
-        return [{ ...newPost, likedByMe: false, replies: newPost.replies.map((r) => ({ ...r, likedByMe: false })) }, ...prev];
+      setPosts(prev => {
+        if (prev.some(p => p.id === newPost.id)) return prev;
+        return [{ ...newPost, likedByMe: false, replies: newPost.replies.map(r => ({ ...r, likedByMe: false })) }, ...prev];
       });
     });
 
-    // ── Real-time event: a post's like count changed ──
     socket.on("post_liked", ({ id, likes }: { id: string; likes: number }) => {
-      setPosts((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, likes } : p))
-      );
+      setPosts(prev => prev.map(p => p.id === id ? { ...p, likes } : p));
     });
 
-    // ── Real-time event: a post's view count changed ──
     socket.on("post_viewed", ({ id, views }: { id: string; views: number }) => {
-      setPosts((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, views } : p))
-      );
+      setPosts(prev => prev.map(p => p.id === id ? { ...p, views } : p));
     });
 
-    // ── Real-time event: a new reply was added to a post ──
     socket.on("new_reply", ({ postId, reply }: { postId: string; reply: Reply }) => {
-      setPosts((prev) =>
-        prev.map((p) => {
-          if (p.id !== postId) return p;
-          // Avoid duplicates
-          if (p.replies.some((r) => r.id === reply.id)) return p;
-          return { ...p, replies: [...p.replies, { ...reply, likedByMe: false }] };
-        })
-      );
+      setPosts(prev => prev.map(p => {
+        if (p.id !== postId) return p;
+        if (p.replies.some(r => r.id === reply.id)) return p;
+        return { ...p, replies: [...p.replies, { ...reply, likedByMe: false }] };
+      }));
     });
 
-    // ── Real-time event: a reply's like count changed ──
     socket.on("reply_liked", ({ postId, replyId, likes }: { postId: string; replyId: string; likes: number }) => {
-      setPosts((prev) =>
-        prev.map((p) => {
-          if (p.id !== postId) return p;
-          return {
-            ...p,
-            replies: p.replies.map((r) => (r.id === replyId ? { ...r, likes } : r)),
-          };
-        })
-      );
+      setPosts(prev => prev.map(p => {
+        if (p.id !== postId) return p;
+        return { ...p, replies: p.replies.map(r => r.id === replyId ? { ...r, likes } : r) };
+      }));
     });
 
-    // Cleanup on unmount
     return () => {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, []); // run once on mount
+  }, []);
 
-  // ── Action handlers (REST calls — Socket.io propagates to other users) ──
+  // ── Action handlers ────────────────────────────────────────────────────────
 
   const handleLikePost = async (postId: string, alreadyLiked: boolean) => {
-    // Optimistic update for the current user
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === postId
-          ? { ...p, likes: alreadyLiked ? p.likes - 1 : p.likes + 1, likedByMe: !alreadyLiked }
-          : p
-      )
-    );
+    setPosts(prev => prev.map(p =>
+      p.id === postId
+        ? { ...p, likes: alreadyLiked ? p.likes - 1 : p.likes + 1, likedByMe: !alreadyLiked }
+        : p
+    ));
     const endpoint = alreadyLiked ? "unlike" : "like";
     try {
-      await apiFetch<{ likes: number }>(`${API}/posts/${postId}/${endpoint}`, { method: "POST" });
-      // Server emits "post_liked" via Socket.io → other clients update automatically
+      await apiFetch<{ likes: number }>(`${API}/posts/${postId}/${endpoint}`, {
+        method: "POST",
+        body: JSON.stringify({ likerName: currentAuthor, likerClerkId: currentClerkId }),
+      });
     } catch {
-      // Revert optimistic update on error
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId
-            ? { ...p, likes: alreadyLiked ? p.likes + 1 : p.likes - 1, likedByMe: alreadyLiked }
-            : p
-        )
-      );
+      setPosts(prev => prev.map(p =>
+        p.id === postId
+          ? { ...p, likes: alreadyLiked ? p.likes + 1 : p.likes - 1, likedByMe: alreadyLiked }
+          : p
+      ));
     }
   };
 
   const handleLikeReply = async (postId: string, replyId: string, alreadyLiked: boolean) => {
     if (alreadyLiked) return;
-    // Optimistic update for the current user
-    setPosts((prev) =>
-      prev.map((p) =>
+    setPosts(prev => prev.map(p =>
+      p.id !== postId ? p : {
+        ...p,
+        replies: p.replies.map(r =>
+          r.id === replyId ? { ...r, likes: r.likes + 1, likedByMe: true } : r
+        ),
+      }
+    ));
+    try {
+      // Send likerName + likerClerkId so the server can notify the reply author
+      await apiFetch<{ likes: number }>(`${API}/replies/${replyId}/like`, {
+        method: "POST",
+        body: JSON.stringify({
+          likerName:    currentAuthor,
+          likerClerkId: currentClerkId,
+        }),
+      });
+    } catch {
+      setPosts(prev => prev.map(p =>
         p.id !== postId ? p : {
           ...p,
-          replies: p.replies.map((r) =>
-            r.id === replyId ? { ...r, likes: r.likes + 1, likedByMe: true } : r
+          replies: p.replies.map(r =>
+            r.id === replyId ? { ...r, likes: r.likes - 1, likedByMe: false } : r
           ),
         }
-      )
-    );
-    try {
-      await apiFetch<{ likes: number }>(`${API}/replies/${replyId}/like`, { method: "POST" });
-      // Server emits "reply_liked" via Socket.io → other clients update automatically
-    } catch {
-      // Revert optimistic update on error
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id !== postId ? p : {
-            ...p,
-            replies: p.replies.map((r) =>
-              r.id === replyId ? { ...r, likes: r.likes - 1, likedByMe: false } : r
-            ),
-          }
-        )
-      );
+      ));
     }
   };
 
@@ -505,17 +616,18 @@ export default function Community() {
     try {
       const newReply = await apiFetch<Reply>(`${API}/posts/${postId}/replies`, {
         method: "POST",
-        body: JSON.stringify({ author: currentAuthor, avatar: "🐾", content }),
+        body: JSON.stringify({
+          author:  currentAuthor,
+          avatar:  "🐾",
+          content,
+          clerkId: currentClerkId,
+        }),
       });
-
-      // immediately update local UI; Socket.io event may also arrive for other clients
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId
-            ? { ...p, replies: [...p.replies, { ...newReply, likedByMe: false }] }
-            : p
-        )
-      );
+      setPosts(prev => prev.map(p =>
+        p.id === postId
+          ? { ...p, replies: [...p.replies, { ...newReply, likedByMe: false }] }
+          : p
+      ));
     } catch (e) {
       console.error("Failed to add reply", e);
     }
@@ -525,18 +637,13 @@ export default function Community() {
     try {
       const createdPost = await apiFetch<Post>(`${API}/posts`, {
         method: "POST",
-        body: JSON.stringify({ ...data, author: currentAuthor }),
+        body: JSON.stringify({ ...data, author: currentAuthor, clerkId: currentClerkId }),
       });
-
-      setPosts((prev) => [
-        {
-          ...createdPost,
-          likedByMe: false,
-          replies: createdPost.replies.map((r) => ({ ...r, likedByMe: false })),
-        },
-        ...prev,
-      ]);
-
+      setPosts(prev => [{
+        ...createdPost,
+        likedByMe: false,
+        replies:   createdPost.replies.map(r => ({ ...r, likedByMe: false })),
+      }, ...prev]);
       setShowNewPost(false);
     } catch (e: any) {
       alert("Failed to create post: " + e.message);
@@ -546,21 +653,20 @@ export default function Community() {
   const handleIncrementViews = async (postId: string) => {
     try {
       await apiFetch(`${API}/posts/${postId}/view`, { method: "POST" });
-      // Server emits "post_viewed" via Socket.io → all clients update view count
     } catch {}
   };
 
-  // ── Filtering & sorting (client-side, no extra requests) ──
+  // ── Filtering & sorting ───────────────────────────────────────────────────
 
   const filteredPosts = posts
-    .filter((p) => {
-      const matchCat = selectedCategory === "all" || p.category === selectedCategory;
-      const q = searchTerm.toLowerCase();
+    .filter(p => {
+      const matchCat    = selectedCategory === "all" || p.category === selectedCategory;
+      const q           = searchTerm.toLowerCase();
       const matchSearch = !q ||
         p.title.toLowerCase().includes(q) ||
         p.content.toLowerCase().includes(q) ||
         p.author.toLowerCase().includes(q) ||
-        p.tags.some((t) => t.includes(q));
+        p.tags.some(t => t.includes(q));
       return matchCat && matchSearch;
     })
     .sort((a, b) => {
@@ -582,24 +688,20 @@ export default function Community() {
           <div className="max-w-2xl">
             <div className="flex items-center gap-3 mb-3">
               <h1 className="text-4xl sm:text-5xl font-bold text-gray-900">Community</h1>
-              {/* Real-time connection indicator */}
-              <span
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border",
-                  isConnected
-                    ? "bg-green-50 text-green-600 border-green-200"
-                    : "bg-gray-100 text-gray-500 border-gray-200"
-                )}
-              >
-                {isConnected ? (
-                  <><Wifi className="w-3 h-3" /> Live</>
-                ) : (
-                  <><WifiOff className="w-3 h-3" /> Offline</>
-                )}
+              <span className={cn(
+                "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border",
+                isConnected
+                  ? "bg-green-50 text-green-600 border-green-200"
+                  : "bg-gray-100 text-gray-500 border-gray-200"
+              )}>
+                {isConnected
+                  ? <><Wifi className="w-3 h-3" /> Live</>
+                  : <><WifiOff className="w-3 h-3" /> Offline</>
+                }
               </span>
             </div>
             <p className="text-lg text-gray-600 mb-8">
-              Connect with pet lovers. Posts, replies, likes and views update in real-time — no refresh needed.
+              Connect with pet lovers. Posts, replies, likes and views update in real-time.
             </p>
             <div className="flex flex-wrap items-end gap-6 text-sm">
               <div><span className="text-2xl font-bold text-orange-500">4,821</span><p className="text-gray-500">Members</p></div>
@@ -627,7 +729,7 @@ export default function Community() {
                 <Filter className="w-4 h-4" /> Categories
               </h3>
               <div className="space-y-1">
-                {([{ value: "all", label: "All Posts" }, ...Object.entries(CATEGORY_META).map(([v, m]) => ({ value: v, label: m.label }))] as { value: Category; label: string }[]).map((cat) => (
+                {([{ value: "all", label: "All Posts" }, ...Object.entries(CATEGORY_META).map(([v, m]) => ({ value: v, label: m.label }))] as { value: Category; label: string }[]).map(cat => (
                   <button key={cat.value} onClick={() => setSelectedCategory(cat.value)}
                     className={cn("w-full px-3 py-2 rounded-lg text-left text-sm font-semibold transition-all",
                       selectedCategory === cat.value ? "bg-orange-500 text-white" : "text-gray-600 hover:bg-gray-100"
@@ -639,7 +741,7 @@ export default function Community() {
             <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
               <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Sort By</h3>
               <div className="space-y-1">
-                {SORT_OPTIONS.map((opt) => (
+                {SORT_OPTIONS.map(opt => (
                   <button key={opt.value} onClick={() => setSortBy(opt.value)}
                     className={cn("w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all",
                       sortBy === opt.value ? "bg-orange-500 text-white" : "text-gray-600 hover:bg-gray-100"
@@ -648,17 +750,15 @@ export default function Community() {
               </div>
             </div>
 
-            {/* Live status card */}
             <div className={cn(
               "rounded-2xl p-4 border text-sm",
               isConnected ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"
             )}>
               <div className="flex items-center gap-2 font-semibold mb-1">
-                {isConnected ? (
-                  <><Wifi className="w-4 h-4 text-green-500" /><span className="text-green-700">Connected — Live updates on</span></>
-                ) : (
-                  <><WifiOff className="w-4 h-4 text-gray-400" /><span className="text-gray-600">Connecting…</span></>
-                )}
+                {isConnected
+                  ? <><Wifi className="w-4 h-4 text-green-500" /><span className="text-green-700">Live updates on</span></>
+                  : <><WifiOff className="w-4 h-4 text-gray-400" /><span className="text-gray-600">Connecting…</span></>
+                }
               </div>
               <p className={cn("text-xs", isConnected ? "text-green-600" : "text-gray-500")}>
                 {isConnected
@@ -672,8 +772,11 @@ export default function Community() {
           <main className="lg:col-span-3 space-y-5">
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input type="text" placeholder="Search posts, tags, or authors..." value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+              <input
+                type="text"
+                placeholder="Search posts, tags, or authors..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
                 className="w-full pl-11 pr-10 py-3 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent shadow-sm"
               />
               {searchTerm && (
@@ -717,7 +820,7 @@ export default function Community() {
                 <div className="text-5xl mb-4">💬</div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">No posts found</h3>
                 <p className="text-gray-500 text-sm mb-6">
-                  {searchTerm ? `No results for "${searchTerm}". Try a different search.` : "Be the first to post in this category!"}
+                  {searchTerm ? `No results for "${searchTerm}".` : "Be the first to post!"}
                 </p>
                 <button onClick={() => setShowNewPost(true)}
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-orange-500 text-white font-semibold hover:bg-orange-600 transition-colors"
@@ -727,10 +830,12 @@ export default function Community() {
               </div>
             )}
 
-            {!loading && !error && filteredPosts.map((post) => (
+            {!loading && !error && filteredPosts.map(post => (
               <PostCard
                 key={post.id}
                 post={post}
+                currentUserId={currentClerkId}
+                currentUserName={currentAuthor}
                 onLikePost={handleLikePost}
                 onLikeReply={handleLikeReply}
                 onAddReply={handleAddReply}
