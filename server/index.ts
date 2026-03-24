@@ -14,6 +14,7 @@ import { registerChatHandlers }    from "./routes/chat.js";
 import { initNotificationService } from "./models/Notification.js";
 import { connectDB }               from "./db.js";
 import { seedDatabase }            from "./seed.js";
+import hostingRouter from "./routes/hosting.js";
 
 let _io: Server | undefined;
 
@@ -51,6 +52,8 @@ export async function createApp() {
   app.use("/api/notifications", notificationsRouter);
   app.use("/api/sellers",       sellersRouter);
   app.use("/api/store",         storeRouter);
+
+  app.use("/api/hosting", hostingRouter);
 
   return app;
 }

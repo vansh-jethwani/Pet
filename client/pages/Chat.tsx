@@ -243,7 +243,7 @@ function CallOverlay({ localStream, remoteStream, info, isMuted, isCameraOff, el
   const isConn  = info.status === "connected" || info.status === "voice_connected";
 
   return (
-    <div className="absolute inset-0 z-40 call-bg flex flex-col rounded-r-2xl overflow-hidden anim-popIn">
+    <div className="fixed inset-0 z-[9999] call-bg flex flex-col overflow-hidden anim-popIn">
       <div className="flex-1 relative flex items-center justify-center bg-slate-950">
         {!isVoice && remoteStream
           ? <video ref={remoteRef} autoPlay playsInline className="w-full h-full object-cover" />
@@ -272,20 +272,39 @@ function CallOverlay({ localStream, remoteStream, info, isMuted, isCameraOff, el
           </div>
         )}
       </div>
-      <div className="flex-shrink-0 flex items-center justify-center gap-4 py-5 px-4 border-t border-white/10">
-        <button onClick={onMute} className={cn("w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg",
-          isMuted ? "bg-red-500 text-white" : "bg-white/15 text-white hover:bg-white/25")}>
-          {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-        </button>
-        {!isVoice && (
-          <button onClick={onCam} className={cn("w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg",
-            isCameraOff ? "bg-red-500 text-white" : "bg-white/15 text-white hover:bg-white/25")}>
-            {isCameraOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
-          </button>
-        )}
-        <button onClick={onEnd} className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-2xl transition-all hover:scale-105">
-          <PhoneOff className="w-6 h-6 text-white" />
-        </button>
+      <div className="flex-shrink-0 bg-slate-900 border-t border-white/10 px-6 pt-5 pb-8">
+        <div className="flex items-end justify-center gap-8 flex-wrap">
+          {/* Mute / Unmute */}
+          <div className="flex flex-col items-center gap-2">
+            <button onClick={onMute}
+              className={cn("w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg",
+                isMuted ? "bg-red-500 text-white ring-2 ring-red-400/40" : "bg-white/15 text-white hover:bg-white/25")}>
+              {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </button>
+            <span className="text-[11px] text-white/60 font-semibold select-none">{isMuted ? "Unmute" : "Mute"}</span>
+          </div>
+
+          {/* Camera — video calls only */}
+          {!isVoice && (
+            <div className="flex flex-col items-center gap-2">
+              <button onClick={onCam}
+                className={cn("w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg",
+                  isCameraOff ? "bg-red-500 text-white ring-2 ring-red-400/40" : "bg-white/15 text-white hover:bg-white/25")}>
+                {isCameraOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+              </button>
+              <span className="text-[11px] text-white/60 font-semibold select-none">{isCameraOff ? "Cam Off" : "Camera"}</span>
+            </div>
+          )}
+
+          {/* End Call */}
+          <div className="flex flex-col items-center gap-2">
+            <button onClick={onEnd}
+              className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-2xl transition-all hover:scale-105 ring-4 ring-red-500/30">
+              <PhoneOff className="w-6 h-6 text-white" />
+            </button>
+            <span className="text-[11px] text-red-400 font-semibold select-none">End Call</span>
+          </div>
+        </div>
       </div>
     </div>
   );

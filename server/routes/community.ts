@@ -19,7 +19,8 @@ function emit(event: string, data: any) {
   }
 }
 
-function formatPost(doc: any) {
+/** Format a post for the API response. Pass viewerClerkId to compute likedByMe. */
+function formatPost(doc: any, viewerClerkId = "") {
   return {
     id:        doc._id.toString(),
     author:    doc.author,
@@ -30,6 +31,7 @@ function formatPost(doc: any) {
     content:   doc.content,
     tags:      doc.tags ?? [],
     likes:     doc.likes,
+    likedByMe: viewerClerkId ? (doc.likedBy ?? []).includes(viewerClerkId) : false,
     views:     doc.views,
     createdAt: doc.createdAt instanceof Date
       ? doc.createdAt.toISOString()
@@ -42,6 +44,7 @@ function formatPost(doc: any) {
       clerkId:   r.clerkId ?? "",
       content:   r.content,
       likes:     r.likes,
+      likedByMe: viewerClerkId ? (r.likedBy ?? []).includes(viewerClerkId) : false,
       createdAt: r.createdAt instanceof Date
         ? r.createdAt.toISOString()
         : r.createdAt,
@@ -50,7 +53,6 @@ function formatPost(doc: any) {
 }
 
 // ─── Helper: extract @mention from the start of reply content ────────────────
-// Returns the mentioned author name if the content starts with "@Author message"
 function extractMention(content: string): string | null {
   const match = content.match(/^@(\S+)\s/);
   return match ? match[1] : null;
@@ -58,15 +60,17 @@ function extractMention(content: string): string | null {
 
 // ─── Helper: short snippet for notifications (max 40 chars) ──────────────────
 function snippet(text: string, max = 40): string {
-  const clean = text.replace(/^@\S+\s/, "").trim(); // strip leading @mention
+  const clean = text.replace(/^@\S+\s/, "").trim();
   return clean.length > max ? clean.slice(0, max) + "…" : clean;
 }
 
-// GET /api/community/posts
-router.get("/posts", (async (_req, res) => {
+// GET /api/community/posts?clerkId=xxx
+// clerkId query param is used to compute likedByMe for the authenticated user
+router.get("/posts", (async (req, res) => {
   try {
+    const viewerClerkId = (req.query.clerkId as string) || "";
     const posts = await Post.find().sort({ createdAt: -1 });
-    res.json(posts.map(formatPost));
+    res.json(posts.map(p => formatPost(p, viewerClerkId)));
   } catch (err) {
     console.error("[community] GET /posts error:", err);
     res.status(500).json({ error: "Failed to fetch posts" });
@@ -93,7 +97,7 @@ router.post("/posts", (async (req, res) => {
       tags:    Array.isArray(tags) ? tags : [],
     });
 
-    const formatted = formatPost(post);
+    const formatted = formatPost(post, clerkId || "");
     emit("new_post", formatted);
     res.status(201).json(formatted);
   } catch (err) {
@@ -102,43 +106,96 @@ router.post("/posts", (async (req, res) => {
   }
 }) as RequestHandler);
 
-// POST /api/community/posts/:id/like
+// PATCH /api/community/posts/:id — edit own post (title, content, tags)
+router.patch("/posts/:id", (async (req, res) => {
+  try {
+    const { clerkId, title, content, tags } = req.body as {
+      clerkId?: string; title?: string; content?: string; tags?: string[];
+    };
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ error: "Post not found" });
+    if (!clerkId || post.clerkId !== clerkId)
+      return res.status(403).json({ error: "Not authorized to edit this post" });
+
+    if (title?.trim())   post.title   = title.trim();
+    if (content?.trim()) post.content = content.trim();
+    if (Array.isArray(tags)) post.tags = tags;
+    await post.save();
+
+    const formatted = formatPost(post, clerkId);
+    emit("post_updated", formatted);
+    res.json(formatted);
+  } catch (err) {
+    console.error("[community] PATCH /posts/:id error:", err);
+    res.status(500).json({ error: "Failed to update post" });
+  }
+}) as RequestHandler);
+
+// DELETE /api/community/posts/:id — delete own post
+router.delete("/posts/:id", (async (req, res) => {
+  try {
+    const clerkId = (req.query.clerkId as string) || (req.body?.clerkId as string) || "";
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ error: "Post not found" });
+    if (!clerkId || post.clerkId !== clerkId)
+      return res.status(403).json({ error: "Not authorized to delete this post" });
+
+    await post.deleteOne();
+    emit("post_deleted", { id: req.params.id });
+    res.json({ deleted: true });
+  } catch (err) {
+    console.error("[community] DELETE /posts/:id error:", err);
+    res.status(500).json({ error: "Failed to delete post" });
+  }
+}) as RequestHandler);
+
+// POST /api/community/posts/:id/like  — idempotent, tracks liker in likedBy[]
 router.post("/posts/:id/like", (async (req, res) => {
   try {
     const { likerName, likerClerkId } = req.body as {
       likerName?: string;
       likerClerkId?: string;
     };
-    const post = await Post.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { likes: 1 } },
+
+    // Only like if not already liked
+    const post = await Post.findOneAndUpdate(
+      { _id: req.params.id, likedBy: { $ne: likerClerkId } },
+      { $inc: { likes: 1 }, $addToSet: { likedBy: likerClerkId } },
       { new: true }
     );
-    if (!post) return res.status(404).json({ error: "Post not found" });
 
-    emit("post_liked", { id: req.params.id, likes: post.likes });
+    // If post is null here the user already liked it — fetch current data
+    const current = post ?? await Post.findById(req.params.id);
+    if (!current) return res.status(404).json({ error: "Post not found" });
 
-    if (post.clerkId?.trim() && likerName && likerClerkId !== post.clerkId) {
-      notifyCommunityLike(post.clerkId, likerName, post.title, post._id.toString()).catch(console.error);
+    emit("post_liked", { id: req.params.id, likes: current.likes });
+
+    if (post && current.clerkId?.trim() && likerName && likerClerkId !== current.clerkId) {
+      notifyCommunityLike(current.clerkId, likerName, current.title, current._id.toString()).catch(console.error);
     }
 
-    res.json({ likes: post.likes });
+    res.json({ likes: current.likes });
   } catch (err) {
     console.error("[community] POST /posts/:id/like error:", err);
     res.status(500).json({ error: "Failed to like post" });
   }
 }) as RequestHandler);
 
-// POST /api/community/posts/:id/unlike
+// POST /api/community/posts/:id/unlike — idempotent
 router.post("/posts/:id/unlike", (async (req, res) => {
   try {
-    const post = await Post.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { likes: -1 } },
+    const { likerClerkId } = req.body as { likerClerkId?: string };
+
+    const post = await Post.findOneAndUpdate(
+      { _id: req.params.id, likedBy: likerClerkId },
+      { $inc: { likes: -1 }, $pull: { likedBy: likerClerkId } },
       { new: true }
     );
-    if (!post) return res.status(404).json({ error: "Post not found" });
-    const likes = Math.max(0, post.likes);
+
+    const current = post ?? await Post.findById(req.params.id);
+    if (!current) return res.status(404).json({ error: "Post not found" });
+
+    const likes = Math.max(0, current.likes);
     emit("post_liked", { id: req.params.id, likes });
     res.json({ likes });
   } catch (err) {
@@ -180,7 +237,7 @@ router.post("/posts/:id/replies", (async (req, res) => {
           replies: {
             author:  author.trim(),
             avatar:  avatar || "🐾",
-            clerkId: clerkId || "",   // ← SAVE clerkId on the reply subdoc
+            clerkId: clerkId || "",
             content: content.trim(),
           },
         },
@@ -198,6 +255,7 @@ router.post("/posts/:id/replies", (async (req, res) => {
       clerkId:   newReply.clerkId ?? "",
       content:   newReply.content,
       likes:     newReply.likes,
+      likedByMe: false,
       createdAt: newReply.createdAt instanceof Date
         ? newReply.createdAt.toISOString()
         : newReply.createdAt,
@@ -206,18 +264,13 @@ router.post("/posts/:id/replies", (async (req, res) => {
     emit("new_reply", { postId: req.params.id, reply: replyPayload });
 
     const postId = post._id.toString();
-
-    // ── Notify 1: post author gets notified when someone replies to their post
-    //    (skip if replier IS the post author, or if it's a reply-to-reply @mention)
     const mentionedAuthor = extractMention(content.trim());
+
     if (post.clerkId?.trim() && clerkId !== post.clerkId && !mentionedAuthor) {
       notifyCommunityReply(post.clerkId, author.trim(), post.title, postId).catch(console.error);
     }
 
-    // ── Notify 2: if this reply starts with @SomeAuthor (reply-to-reply),
-    //    find that reply author's clerkId and notify them.
     if (mentionedAuthor) {
-      // Find the most-recent reply by that author to get their clerkId
       const targetReply = [...post.replies]
         .reverse()
         .find(r => r.author === mentionedAuthor && r._id.toString() !== newReply._id.toString());
@@ -231,8 +284,6 @@ router.post("/posts/:id/replies", (async (req, res) => {
         ).catch(console.error);
       }
 
-      // ALSO notify post author if the reply-to-reply is on their post
-      // and they are not the replier or the mentioned person
       if (
         post.clerkId?.trim() &&
         post.clerkId !== clerkId &&
@@ -249,43 +300,42 @@ router.post("/posts/:id/replies", (async (req, res) => {
   }
 }) as RequestHandler);
 
-// POST /api/community/replies/:replyId/like
+// POST /api/community/replies/:replyId/like — idempotent
 router.post("/replies/:replyId/like", (async (req, res) => {
   try {
-    // Accept likerName + likerClerkId so we can notify the reply author
     const { likerName, likerClerkId } = req.body as {
       likerName?: string;
       likerClerkId?: string;
     };
 
+    // Only like if not already liked by this user
     const post = await Post.findOneAndUpdate(
-      { "replies._id": req.params.replyId },
-      { $inc: { "replies.$.likes": 1 } },
+      { "replies._id": req.params.replyId, "replies.likedBy": { $ne: likerClerkId } },
+      {
+        $inc:      { "replies.$.likes": 1 },
+        $addToSet: { "replies.$.likedBy": likerClerkId },
+      },
       { new: true }
     );
-    if (!post) return res.status(404).json({ error: "Reply not found" });
 
-    const reply = post.replies.find(r => r._id.toString() === req.params.replyId);
+    const current = post ?? await Post.findOne({ "replies._id": req.params.replyId });
+    if (!current) return res.status(404).json({ error: "Reply not found" });
+
+    const reply = current.replies.find(r => r._id.toString() === req.params.replyId);
     const newLikes = reply?.likes ?? 0;
 
     emit("reply_liked", {
-      postId:  post._id.toString(),
+      postId:  current._id.toString(),
       replyId: req.params.replyId,
       likes:   newLikes,
     });
 
-    // Notify the reply author if they are not the one liking their own reply
-    if (
-      reply?.clerkId?.trim() &&
-      likerName &&
-      likerClerkId !== reply.clerkId
-    ) {
-      const replySnippet = snippet(reply.content);
+    if (post && reply?.clerkId?.trim() && likerName && likerClerkId !== reply.clerkId) {
       notifyCommunityReplyLike(
         reply.clerkId,
         likerName,
-        replySnippet,
-        post._id.toString()
+        snippet(reply.content),
+        current._id.toString()
       ).catch(console.error);
     }
 

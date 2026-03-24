@@ -3,15 +3,13 @@ import mongoose, { Schema, Document } from "mongoose";
 // ─── Reply Schema ─────────────────────────────────────────────────────────────
 
 export interface IReply {
-  _id:     mongoose.Types.ObjectId;
-  author:  string;
-  avatar:  string;
-  // clerkId of the reply author — used to notify them when:
-  //   • someone replies to their reply (@mention)
-  //   • someone likes their reply
-  clerkId: string;
-  content: string;
-  likes:   number;
+  _id:      mongoose.Types.ObjectId;
+  author:   string;
+  avatar:   string;
+  clerkId:  string;
+  content:  string;
+  likes:    number;
+  likedBy:  string[];   // clerkIds of users who liked this reply
   createdAt: Date;
 }
 
@@ -22,6 +20,7 @@ const ReplySchema = new Schema<IReply>(
     clerkId: { type: String, default: "" },
     content: { type: String, required: true },
     likes:   { type: Number, default: 0 },
+    likedBy: [{ type: String }],
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );
@@ -37,6 +36,7 @@ export interface IPost extends Document {
   content:  string;
   tags:     string[];
   likes:    number;
+  likedBy:  string[];   // clerkIds of users who liked this post
   views:    number;
   replies:  IReply[];
   createdAt: Date;
@@ -56,6 +56,7 @@ const PostSchema = new Schema<IPost>(
     content: { type: String, required: true },
     tags:    [{ type: String }],
     likes:   { type: Number, default: 0 },
+    likedBy: [{ type: String }],
     views:   { type: Number, default: 0 },
     replies: [ReplySchema],
   },

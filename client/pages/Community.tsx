@@ -136,16 +136,19 @@ function ReplyItem({
 
 function PostCard({
   post, currentUserId, currentUserName,
-  onLikePost, onLikeReply, onAddReply, onExpand,
+  onLikePost, onLikeReply, onAddReply, onExpand, onDeletePost, onEditPost,
 }: {
   post:            PostWithLiked;
   currentUserId:   string;
   currentUserName: string;
-  onLikePost:  (id: string, liked: boolean) => void;
-  onLikeReply: (postId: string, replyId: string, liked: boolean) => void;
-  onAddReply:  (postId: string, content: string) => Promise<void>;
-  onExpand:    (id: string) => void;
+  onLikePost:    (id: string, liked: boolean) => void;
+  onLikeReply:   (postId: string, replyId: string, liked: boolean) => void;
+  onAddReply:    (postId: string, content: string) => Promise<void>;
+  onExpand:      (id: string) => void;
+  onDeletePost?: (id: string) => void;
+  onEditPost?:   (post: PostWithLiked) => void;
 }) {
+  const isOwn = !!currentUserId && post.clerkId === currentUserId;
   const [expanded,       setExpanded]       = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyText,      setReplyText]      = useState("");
@@ -226,9 +229,27 @@ function PostCard({
                   })}
                 </p>
               </div>
-              <span className={cn("text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap", meta.bg, meta.color)}>
-                {meta.label}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={cn("text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap", meta.bg, meta.color)}>
+                  {meta.label}
+                </span>
+                {isOwn && (
+                  <>
+                    <button
+                      onClick={() => onEditPost?.(post)}
+                      className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button
+                      onClick={() => onDeletePost?.(post.id)}
+                      className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                    >
+                      🗑️ Delete
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -377,6 +398,79 @@ function PostCard({
 
 // ─── NewPostModal ─────────────────────────────────────────────────────────────
 
+function EditPostModal({ post, onClose, onSave }: {
+  post:    PostWithLiked;
+  onClose: () => void;
+  onSave:  (id: string, title: string, content: string, tags: string[]) => Promise<void>;
+}) {
+  const [title,      setTitle]      = useState(post.title);
+  const [content,    setContent]    = useState(post.content);
+  const [tagsInput,  setTagsInput]  = useState(post.tags.join(", "));
+  const [errors,     setErrors]     = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSave = async () => {
+    const e: Record<string, string> = {};
+    if (!title.trim())   e.title   = "Title is required";
+    if (!content.trim()) e.content = "Content is required";
+    setErrors(e);
+    if (Object.keys(e).length > 0 || submitting) return;
+    setSubmitting(true);
+    try {
+      const tags = tagsInput.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
+      await onSave(post.id, title.trim(), content.trim(), tags);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+          <h2 className="text-xl font-bold text-gray-900">Edit Post</h2>
+          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Title</label>
+            <input value={title}
+              onChange={e => { setTitle(e.target.value); if (errors.title) setErrors(p => ({ ...p, title: "" })); }}
+              className={cn("w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent",
+                errors.title ? "border-red-400 bg-red-50" : "border-gray-200")} />
+            {errors.title && <p className="text-xs text-red-600 mt-1">{errors.title}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Content</label>
+            <textarea value={content} rows={5}
+              onChange={e => { setContent(e.target.value); if (errors.content) setErrors(p => ({ ...p, content: "" })); }}
+              className={cn("w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none",
+                errors.content ? "border-red-400 bg-red-50" : "border-gray-200")} />
+            {errors.content && <p className="text-xs text-red-600 mt-1">{errors.content}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Tags <span className="text-gray-400 font-normal">(optional, comma-separated)</span>
+            </label>
+            <input value={tagsInput} onChange={e => setTagsInput(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent" />
+          </div>
+        </div>
+        <div className="flex gap-3 p-6 pt-0">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors">Cancel</button>
+          <button onClick={handleSave} disabled={submitting}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-orange-500 text-white font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NewPostModal({ onClose, onSubmit }: {
   onClose:  () => void;
   onSubmit: (data: CreatePostBody) => Promise<void>;
@@ -398,7 +492,7 @@ function NewPostModal({ onClose, onSubmit }: {
     setSubmitting(true);
     try {
       const tags = tagsInput.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
-      await onSubmit({ author: "You", avatar: "🐾", category, title: title.trim(), content: content.trim(), tags });
+      await onSubmit({ author: "", avatar: "🐾", category, title: title.trim(), content: content.trim(), tags }); // author filled by parent
     } catch (err) {
       console.error(err);
     } finally {
@@ -490,24 +584,23 @@ export default function Community() {
 
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
+  const [editingPost, setEditingPost] = useState<PostWithLiked | null>(null);
 
-  // ── Initial data load ──────────────────────────────────────────────────────
+  // ── Initial data load — pass clerkId so server computes likedByMe ──────────
   const loadPosts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiFetch<Post[]>(`${API}/posts`);
-      setPosts(data.map(p => ({
-        ...p,
-        likedByMe: false,
-        replies:   p.replies.map(r => ({ ...r, likedByMe: false })),
-      })));
+      const params = currentClerkId ? `?clerkId=${encodeURIComponent(currentClerkId)}` : "";
+      const data = await apiFetch<PostWithLiked[]>(`${API}/posts${params}`);
+      // Server now returns likedByMe correctly — no need to override with false
+      setPosts(data);
     } catch (e: any) {
       setError(e.message || "Failed to load posts");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentClerkId]);
 
   useEffect(() => { loadPosts(); }, [loadPosts]);
 
@@ -522,14 +615,15 @@ export default function Community() {
     socket.on("connect",    () => setIsConnected(true));
     socket.on("disconnect", () => setIsConnected(false));
 
-    socket.on("new_post", (newPost: Post) => {
+    socket.on("new_post", (newPost: PostWithLiked) => {
       setPosts(prev => {
         if (prev.some(p => p.id === newPost.id)) return prev;
-        return [{ ...newPost, likedByMe: false, replies: newPost.replies.map(r => ({ ...r, likedByMe: false })) }, ...prev];
+        return [{ ...newPost, likedByMe: newPost.likedByMe ?? false, replies: (newPost.replies ?? []).map(r => ({ ...r, likedByMe: false })) }, ...prev];
       });
     });
 
     socket.on("post_liked", ({ id, likes }: { id: string; likes: number }) => {
+      // Don't override likedByMe from socket — that comes from polling
       setPosts(prev => prev.map(p => p.id === id ? { ...p, likes } : p));
     });
 
@@ -537,7 +631,15 @@ export default function Community() {
       setPosts(prev => prev.map(p => p.id === id ? { ...p, views } : p));
     });
 
-    socket.on("new_reply", ({ postId, reply }: { postId: string; reply: Reply }) => {
+    socket.on("post_updated", (updated: PostWithLiked) => {
+      setPosts(prev => prev.map(p => p.id === updated.id ? { ...updated, likedByMe: p.likedByMe, replies: p.replies } : p));
+    });
+
+    socket.on("post_deleted", ({ id }: { id: string }) => {
+      setPosts(prev => prev.filter(p => p.id !== id));
+    });
+
+    socket.on("new_reply", ({ postId, reply }: { postId: string; reply: ReplyWithLiked }) => {
       setPosts(prev => prev.map(p => {
         if (p.id !== postId) return p;
         if (p.replies.some(r => r.id === reply.id)) return p;
@@ -561,6 +663,7 @@ export default function Community() {
   // ── Action handlers ────────────────────────────────────────────────────────
 
   const handleLikePost = async (postId: string, alreadyLiked: boolean) => {
+    // Optimistic update
     setPosts(prev => prev.map(p =>
       p.id === postId
         ? { ...p, likes: alreadyLiked ? p.likes - 1 : p.likes + 1, likedByMe: !alreadyLiked }
@@ -573,6 +676,7 @@ export default function Community() {
         body: JSON.stringify({ likerName: currentAuthor, likerClerkId: currentClerkId }),
       });
     } catch {
+      // Roll back on failure
       setPosts(prev => prev.map(p =>
         p.id === postId
           ? { ...p, likes: alreadyLiked ? p.likes + 1 : p.likes - 1, likedByMe: alreadyLiked }
@@ -581,31 +685,59 @@ export default function Community() {
     }
   };
 
+  const handleDeletePost = async (postId: string) => {
+    if (!confirm("Delete this post? This cannot be undone.")) return;
+    // Optimistic remove
+    setPosts(prev => prev.filter(p => p.id !== postId));
+    try {
+      await apiFetch(`${API}/posts/${postId}?clerkId=${encodeURIComponent(currentClerkId)}`, {
+        method: "DELETE",
+      });
+    } catch (e: any) {
+      alert("Failed to delete post: " + e.message);
+      loadPosts(); // restore
+    }
+  };
+
+  const handleEditPost = async (id: string, title: string, content: string, tags: string[]) => {
+    try {
+      const updated = await apiFetch<PostWithLiked>(`${API}/posts/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ clerkId: currentClerkId, title, content, tags }),
+      });
+      setPosts(prev => prev.map(p => p.id === id ? { ...updated, likedByMe: p.likedByMe, replies: p.replies } : p));
+      setEditingPost(null);
+    } catch (e: any) {
+      alert("Failed to update post: " + e.message);
+    }
+  };
+
   const handleLikeReply = async (postId: string, replyId: string, alreadyLiked: boolean) => {
-    if (alreadyLiked) return;
+    // Now togglable (server is idempotent so double-like safely does nothing)
     setPosts(prev => prev.map(p =>
       p.id !== postId ? p : {
         ...p,
         replies: p.replies.map(r =>
-          r.id === replyId ? { ...r, likes: r.likes + 1, likedByMe: true } : r
+          r.id === replyId
+            ? { ...r, likes: alreadyLiked ? r.likes - 1 : r.likes + 1, likedByMe: !alreadyLiked }
+            : r
         ),
       }
     ));
     try {
-      // Send likerName + likerClerkId so the server can notify the reply author
       await apiFetch<{ likes: number }>(`${API}/replies/${replyId}/like`, {
         method: "POST",
-        body: JSON.stringify({
-          likerName:    currentAuthor,
-          likerClerkId: currentClerkId,
-        }),
+        body: JSON.stringify({ likerName: currentAuthor, likerClerkId: currentClerkId }),
       });
     } catch {
+      // Roll back
       setPosts(prev => prev.map(p =>
         p.id !== postId ? p : {
           ...p,
           replies: p.replies.map(r =>
-            r.id === replyId ? { ...r, likes: r.likes - 1, likedByMe: false } : r
+            r.id === replyId
+              ? { ...r, likes: alreadyLiked ? r.likes + 1 : r.likes - 1, likedByMe: alreadyLiked }
+              : r
           ),
         }
       ));
@@ -635,15 +767,12 @@ export default function Community() {
 
   const handleNewPost = async (data: CreatePostBody) => {
     try {
-      const createdPost = await apiFetch<Post>(`${API}/posts`, {
+      const createdPost = await apiFetch<PostWithLiked>(`${API}/posts`, {
         method: "POST",
-        body: JSON.stringify({ ...data, author: currentAuthor, clerkId: currentClerkId }),
+        // Always use the real Clerk user name — NewPostModal sends author:"" as placeholder
+        body: JSON.stringify({ ...data, author: currentAuthor, avatar: "🐾", clerkId: currentClerkId }),
       });
-      setPosts(prev => [{
-        ...createdPost,
-        likedByMe: false,
-        replies:   createdPost.replies.map(r => ({ ...r, likedByMe: false })),
-      }, ...prev]);
+      setPosts(prev => [{ ...createdPost, likedByMe: false, replies: [] }, ...prev]);
       setShowNewPost(false);
     } catch (e: any) {
       alert("Failed to create post: " + e.message);
@@ -681,6 +810,13 @@ export default function Community() {
     <div className="min-h-screen bg-gray-50">
       <Header />
       {showNewPost && <NewPostModal onClose={() => setShowNewPost(false)} onSubmit={handleNewPost} />}
+      {editingPost && (
+        <EditPostModal
+          post={editingPost}
+          onClose={() => setEditingPost(null)}
+          onSave={handleEditPost}
+        />
+      )}
 
       {/* Hero */}
       <section className="bg-gradient-to-br from-orange-50 via-white to-amber-50 border-b border-gray-100 py-12 sm:py-16">
@@ -840,6 +976,8 @@ export default function Community() {
                 onLikeReply={handleLikeReply}
                 onAddReply={handleAddReply}
                 onExpand={handleIncrementViews}
+                onDeletePost={handleDeletePost}
+                onEditPost={setEditingPost}
               />
             ))}
           </main>

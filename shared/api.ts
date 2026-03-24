@@ -20,20 +20,24 @@ export interface Reply {
   postId: string;
   author: string;
   avatar: string;
+  clerkId: string;
   content: string;
   createdAt: string;
   likes: number;
+  likedByMe?: boolean;
 }
 
 export interface Post {
   id: string;
   author: string;
   avatar: string;
+  clerkId: string;
   category: PostCategory;
   title: string;
   content: string;
   tags: string[];
   likes: number;
+  likedByMe?: boolean;
   views: number;
   createdAt: string;
   replies: Reply[];
