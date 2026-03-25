@@ -1,15 +1,18 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useUser, useClerk } from "@clerk/clerk-react";
 import Header from "@/components/Header";
 import {
-  PawPrint, Heart, ShoppingBag, Calendar, MapPin, Shield,
+  PawPrint, Heart, ShoppingBag, Calendar, MapPin,
   Edit, Plus, Trash2, LogOut, Star, Clock, CheckCircle, Home,
   Stethoscope, ChevronRight, Camera, Mail, Award, RefreshCw,
-  TrendingUp, Package, AlertCircle, Loader2, ExternalLink,
-  Activity, Zap, Users, X,
+  TrendingUp, Package, Loader2, ExternalLink, Save,
+  Activity, Zap, Users, X, Upload, ImageIcon, Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const CLOUDINARY_CLOUD  = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
 /* ─── Types ───────────────────────────────────────────────────────────────── */
 interface VetBooking {
@@ -140,7 +143,7 @@ const STYLES = `
 .badge-active   { background: linear-gradient(135deg,#3b82f6,#6366f1); }
 
 .hero-gradient {
-  background: linear-gradient(135deg, #1a0a00 0%, #2d1400 30%, #431f00 60%, #1a0a00 100%);
+  background: linear-gradient(135deg, #c2410c 0%, #ea580c 30%, #f97316 60%, #f59e0b 100%);
 }
 .accent-line {
   background: linear-gradient(90deg, #f97316, #f59e0b, #ef4444);
@@ -202,20 +205,84 @@ export default function Dashboard() {
 
   const [loadingPets,    setLoadingPets]    = useState(false);
   const [loadingOrders,  setLoadingOrders]  = useState(false);
-  const [loadingVets,    setLoadingVets]    = useState(false);
   const [loadingHosting, setLoadingHosting] = useState(false);
 
-  const [deletingPet, setDeletingPet] = useState<string | null>(null);
+  const [deletingPet,   setDeletingPet]   = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  /* ── Photo upload ── */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [customAvatar,    setCustomAvatar]    = useState<string>("");
+  const [uploadingPhoto,  setUploadingPhoto]  = useState(false);
+  const [photoError,      setPhotoError]      = useState<string>("");
+  const [photoSuccess,    setPhotoSuccess]    = useState(false);
+
+  /* ── Profile edit modal ── */
+  const [showEditModal,  setShowEditModal]  = useState(false);
+  const [editName,       setEditName]       = useState("");
+  const [editLocation,   setEditLocation]   = useState("Delhi, India");
+  const [editBio,        setEditBio]        = useState("");
+  const [savedProfile,   setSavedProfile]   = useState({ location: "Delhi, India", bio: "" });
 
   const firstName = user?.firstName ?? "Pet Lover";
   const lastName  = user?.lastName  ?? "";
   const email     = user?.emailAddresses?.[0]?.emailAddress ?? "";
-  const avatar    = user?.imageUrl;
+  const displayAvatar = customAvatar || user?.imageUrl || "";
   const joinDate  = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString("en-IN", { month: "long", year: "numeric" })
     : "Recently";
   const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
+
+  /* ── Load saved profile from localStorage ── */
+  useEffect(() => {
+    const saved = localStorage.getItem(`profile_${user?.id}`);
+    if (saved) {
+      try {
+        const p = JSON.parse(saved);
+        setSavedProfile(p);
+        setEditLocation(p.location || "Delhi, India");
+        setEditBio(p.bio || "");
+      } catch {}
+    }
+    const savedPhoto = localStorage.getItem(`avatar_${user?.id}`);
+    if (savedPhoto) setCustomAvatar(savedPhoto);
+  }, [user?.id]);
+
+  /* ── Upload photo to Cloudinary ── */
+  const handlePhotoUpload = async (file: File) => {
+    if (!file) return;
+    if (!CLOUDINARY_CLOUD || !CLOUDINARY_PRESET) {
+      setPhotoError("Cloudinary not configured.");
+      return;
+    }
+    setUploadingPhoto(true);
+    setPhotoError("");
+    setPhotoSuccess(false);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("upload_preset", CLOUDINARY_PRESET);
+      const r = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: "POST", body: fd });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error?.message || "Upload failed");
+      setCustomAvatar(d.secure_url);
+      localStorage.setItem(`avatar_${user?.id}`, d.secure_url);
+      setPhotoSuccess(true);
+      setTimeout(() => setPhotoSuccess(false), 2500);
+    } catch (err: any) {
+      setPhotoError(err?.message || "Upload failed");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  /* ── Save profile ── */
+  const saveProfile = () => {
+    const p = { location: editLocation, bio: editBio };
+    setSavedProfile(p);
+    localStorage.setItem(`profile_${user?.id}`, JSON.stringify(p));
+    setShowEditModal(false);
+  };
 
   /* ── Fetch pets ── */
   const fetchPets = useCallback(async () => {
@@ -323,7 +390,7 @@ export default function Dashboard() {
   return (
     <>
       <style>{STYLES}</style>
-      <div className="db-root min-h-screen" style={{ background: "#f8f7f4" }}>
+      <div className="db-root min-h-screen" style={{ background: "#fff7ed" }}>
         <Header />
 
         {/* ── HERO ── */}
@@ -338,17 +405,43 @@ export default function Dashboard() {
 
           <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-              {/* Avatar */}
+              {/* Avatar with upload */}
               <div className="relative db-up flex-shrink-0">
-                {avatar ? (
-                  <img src={avatar} alt={firstName}
-                    className="w-24 h-24 rounded-2xl object-cover border-2 border-orange-400/30 shadow-2xl" />
-                ) : (
-                  <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-400 flex items-center justify-center shadow-2xl">
-                    <span className="db-display text-3xl font-black text-white">{initials}</span>
+                <div
+                  className="relative w-28 h-28 rounded-2xl overflow-hidden border-2 border-orange-400/40 shadow-2xl cursor-pointer group"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Click to change photo"
+                >
+                  {displayAvatar ? (
+                    <img src={displayAvatar} alt={firstName} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-orange-500 to-amber-400 flex items-center justify-center">
+                      <span className="db-display text-3xl font-black text-white">{initials}</span>
+                    </div>
+                  )}
+                  {/* Hover overlay */}
+                  <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    {uploadingPhoto
+                      ? <Loader2 className="w-6 h-6 text-white db-spin" />
+                      : <><Camera className="w-6 h-6 text-white mb-1" /><span className="text-white text-[10px] font-bold">Change Photo</span></>}
+                  </div>
+                </div>
+                {photoSuccess && (
+                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-400 rounded-full border-2 border-gray-900 flex items-center justify-center db-pop">
+                    <CheckCircle className="w-3.5 h-3.5 text-white" />
                   </div>
                 )}
-                <div className="absolute -bottom-2 -right-2 w-7 h-7 bg-green-400 rounded-full border-2 border-gray-900 db-pulse" />
+                {!photoSuccess && (
+                  <div className="absolute -bottom-2 -right-2 w-7 h-7 bg-green-400 rounded-full border-2 border-gray-900 db-pulse" />
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); e.target.value = ""; }}
+                />
+                {photoError && <p className="absolute top-full mt-1 text-red-400 text-[10px] w-32 font-semibold">{photoError}</p>}
               </div>
 
               {/* Info */}
@@ -364,15 +457,24 @@ export default function Dashboard() {
                     <Zap className="w-3 h-3" /> Active
                   </span>
                 </div>
+                {savedProfile.bio && (
+                  <p className="text-white/70 text-sm mb-2 italic max-w-sm">"{savedProfile.bio}"</p>
+                )}
                 <div className="flex flex-wrap gap-4 text-sm text-white/60">
                   <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" />{email}</span>
                   <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" />Joined {joinDate}</span>
-                  <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />Delhi, India</span>
+                  <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{savedProfile.location}</span>
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2 flex-shrink-0 db-up" style={{ animationDelay: "140ms" }}>
+              <div className="flex flex-col gap-2 flex-shrink-0 db-up" style={{ animationDelay: "140ms" }}>
+                <button
+                  onClick={() => { setEditName(`${firstName} ${lastName}`.trim()); setShowEditModal(true); }}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/15 border border-white/25 text-white text-sm font-bold hover:bg-white/25 transition-colors backdrop-blur-sm"
+                >
+                  <Edit className="w-4 h-4" /> Edit Profile
+                </button>
                 <Link
                   to="/breeding"
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-bold hover:bg-orange-600 transition-colors shadow-lg shadow-orange-900/30"
@@ -574,8 +676,8 @@ export default function Dashboard() {
                     { label: "Full Name",    value: `${firstName} ${lastName}` || "—" },
                     { label: "Email",        value: email || "—" },
                     { label: "Member Since", value: joinDate },
-                    { label: "Location",     value: "Delhi, India" },
-                    { label: "Account Status", value: "Active & Verified" },
+                    { label: "Location",     value: savedProfile.location },
+                    { label: "Bio",          value: savedProfile.bio || "Not set" },
                     { label: "Pets Registered", value: `${myPets.length} pet${myPets.length !== 1 ? "s" : ""}` },
                   ].map(({ label, value }) => (
                     <div key={label}>
@@ -1034,6 +1136,103 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+        {/* ── EDIT PROFILE MODAL ── */}
+        {showEditModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:"rgba(0,0,0,0.55)",backdropFilter:"blur(4px)"}}>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md db-pop overflow-hidden">
+              {/* Modal header */}
+              <div className="bg-gradient-to-r from-orange-500 to-amber-400 px-6 py-5 flex items-center justify-between">
+                <div>
+                  <h2 className="db-display text-xl font-black text-white">Edit Profile</h2>
+                  <p className="text-white/75 text-xs mt-0.5">Update your public profile info</p>
+                </div>
+                <button onClick={() => setShowEditModal(false)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Photo upload */}
+              <div className="px-6 pt-6 flex items-center gap-4">
+                <div
+                  className="relative w-20 h-20 rounded-2xl overflow-hidden border-2 border-orange-200 cursor-pointer group flex-shrink-0"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {displayAvatar ? (
+                    <img src={displayAvatar} alt={firstName} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-orange-400 to-amber-300 flex items-center justify-center">
+                      <span className="text-white text-2xl font-black">{initials}</span>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    {uploadingPhoto ? <Loader2 className="w-5 h-5 text-white db-spin" /> : <Camera className="w-5 h-5 text-white" />}
+                  </div>
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900 text-sm">{firstName} {lastName}</p>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-lg bg-orange-50 text-orange-600 text-xs font-bold hover:bg-orange-100 transition-colors border border-orange-200"
+                  >
+                    <Upload className="w-3 h-3" />
+                    {uploadingPhoto ? "Uploading…" : "Change Photo"}
+                  </button>
+                  {photoSuccess && <p className="text-green-600 text-xs mt-1 font-semibold">✓ Photo updated!</p>}
+                  {photoError && <p className="text-red-500 text-xs mt-1">{photoError}</p>}
+                </div>
+              </div>
+
+              {/* Fields */}
+              <div className="px-6 py-5 space-y-4">
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">Display Name (via Clerk)</label>
+                  <input
+                    value={editName}
+                    disabled
+                    className="w-full px-3 py-2.5 text-sm border border-gray-100 rounded-xl bg-gray-50 text-gray-400 cursor-not-allowed"
+                    placeholder="Set in Clerk dashboard"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Name is managed by your Clerk account</p>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">Location</label>
+                  <input
+                    value={editLocation}
+                    onChange={e => setEditLocation(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    placeholder="e.g. Mumbai, India"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">Bio</label>
+                  <textarea
+                    value={editBio}
+                    onChange={e => setEditBio(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+                    placeholder="Tell others about yourself…"
+                  />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 pb-6 flex gap-3">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-bold hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveProfile}
+                  className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-bold hover:bg-orange-600 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-orange-200"
+                >
+                  <Save className="w-4 h-4" /> Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
