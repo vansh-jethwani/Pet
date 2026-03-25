@@ -991,68 +991,52 @@ export default function Adoption() {
         {showCreate && user && <ListPetModal onClose={() => setShowCreate(false)} onCreated={handleCreated} user={user} />}
 
         {/* ── HERO ── */}
-        <section className="relative overflow-hidden pt-14 pb-20">
-          {/* Background decorations */}
-          <div className="dot-pattern absolute inset-0 pointer-events-none" />
-          <div className="absolute -top-32 -left-32 w-[600px] h-[600px] rounded-full bg-purple-300/20 blur-3xl" />
-          <div className="absolute -bottom-32 -right-16 w-[500px] h-[500px] rounded-full bg-pink-300/15 blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] rounded-full bg-indigo-200/10 blur-3xl" />
-
+        <section className="relative overflow-hidden bg-gradient-to-br from-rose-600 via-orange-500 to-amber-400 py-8 sm:py-10">
+          <div className="absolute inset-0 opacity-[.05]" style={{backgroundImage:"radial-gradient(circle,white 1px,transparent 1px)",backgroundSize:"20px 20px"}}/>
+          <div className="absolute -top-20 right-0 w-72 h-72 rounded-full bg-yellow-200/20 blur-3xl pointer-events-none"/>
+          <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full bg-rose-800/30 blur-3xl pointer-events-none"/>
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="max-w-4xl mx-auto text-center">
-              {/* Eyebrow */}
-              <div className="inline-flex items-center gap-2 bg-white/80 border border-purple-200 backdrop-blur-sm px-5 py-2.5 rounded-full text-sm font-bold text-purple-700 mb-8 shadow-sm">
-                <span className="w-2 h-2 rounded-full bg-purple-500 ad-pulse" />
-                India's Largest Pet Adoption & Rehoming Platform
-              </div>
-
-              <h1 className="ad-display text-6xl sm:text-7xl font-black text-gray-900 leading-[1.05] mb-6">
-                Every Pet Deserves a{" "}
-                <span className="ad-shimmer-text">Loving Home</span>
-              </h1>
-
-              <p className="text-lg text-gray-600 mb-10 max-w-2xl mx-auto leading-relaxed">
-                Adopt, rescue, or find a new home for your pet. Connect with verified owners and shelters across India.
-              </p>
-
-              {/* Stats */}
-              <div className="flex flex-wrap items-center justify-center gap-6 mb-12">
-                {[
-                  { val: `${adopt}`, label: "Pets for Adoption" },
-                  { val: `${forSale}`, label: "Pets for Sale" },
-                  { val: `${favorites.size}`, label: "My Favorites" },
-                  { val: "₹ INR", label: "All prices in Rupees" },
-                ].map(({ val, label }) => (
-                  <div key={label} className="glass-card rounded-2xl px-6 py-4 text-center min-w-[120px] shadow-sm">
-                    <p className="ad-display text-3xl font-black text-purple-700">{val}</p>
-                    <p className="text-xs font-semibold text-gray-500 mt-0.5">{label}</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+              {/* Left */}
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center flex-shrink-0 shadow-lg text-2xl">🐾</div>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-yellow-200">India's Largest</span>
+                    <span className="w-1 h-1 rounded-full bg-white/40"/>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Pet Platform</span>
                   </div>
-                ))}
+                  <h1 className="ad-display text-3xl sm:text-4xl font-black text-white leading-none">Adoption &amp; Rehoming</h1>
+                  <p className="text-white/65 text-xs mt-1">Adopt, rescue, or find a new home for your pet</p>
+                </div>
               </div>
-
-              {/* CTA buttons */}
-              <div className="flex flex-wrap gap-4 justify-center">
-                <button onClick={() => user ? setShowCreate(true) : alert("Please sign in")}
-                  className="flex items-center gap-2.5 px-8 py-4 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-500 text-white font-black text-base hover:opacity-90 transition-all shadow-xl shadow-purple-300/40">
-                  <Plus className="w-5 h-5" /> List Your Pet
-                </button>
-                {user && (
-                  <button onClick={() => setShowMyListings(!showMyListings)}
-                    className={cn("flex items-center gap-2.5 px-8 py-4 rounded-2xl font-black text-base transition-all shadow-sm border-2",
-                      showMyListings
-                        ? "bg-purple-600 text-white border-purple-600"
-                        : "bg-white/80 text-purple-700 border-purple-200 hover:bg-purple-50 backdrop-blur-sm"
-                    )}>
-                    <Edit3 className="w-5 h-5" /> My Listings
+              {/* Right */}
+              <div className="flex flex-col gap-2.5 sm:items-end">
+                <div className="flex items-center gap-2 text-xs text-white/70 flex-wrap">
+                  {[{v:`${adopt}`,l:"For Adoption"},{v:`${forSale}`,l:"For Sale"},{v:"₹ INR",l:"All Prices"}].map(({v,l})=>(
+                    <div key={l} className="bg-black/20 backdrop-blur-sm px-3 py-1.5 rounded-lg text-center">
+                      <p className="font-black text-white text-sm">{v}</p>
+                      <p className="text-white/60 text-[10px] uppercase tracking-wide">{l}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button onClick={() => user ? setShowCreate(true) : alert("Please sign in")}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-rose-600 font-black text-sm hover:bg-rose-50 transition-all shadow-md">
+                    <Plus className="w-4 h-4" /> List Pet
                   </button>
-                )}
+                  {user && (
+                    <button onClick={() => setShowMyListings(!showMyListings)}
+                      className={cn("flex items-center gap-1.5 px-4 py-2 rounded-xl font-black text-sm transition-all border-2",
+                        showMyListings?"bg-white text-rose-600 border-white":"bg-white/15 text-white border-white/25 hover:bg-white/25 backdrop-blur-sm")}>
+                      <Edit3 className="w-4 h-4" /> My Listings
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-
-          <svg className="absolute bottom-0 left-0 w-full" viewBox="0 0 1440 32" preserveAspectRatio="none">
-            <path d="M0,32 C360,8 720,0 1080,8 L1440,0 L1440,32 L0,32 Z" fill="rgba(245,243,255,0.5)" />
-          </svg>
+          <svg className="absolute bottom-0 left-0 w-full" viewBox="0 0 1440 24" preserveAspectRatio="none"><path d="M0,24 C480,4 960,4 1440,24 L1440,24 L0,24 Z" fill="rgba(245,243,255,0.4)"/></svg>
         </section>
 
         {/* ── CONTENT ── */}

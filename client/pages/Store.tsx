@@ -777,57 +777,51 @@ export default function Store() {
         )}
 
         {/* ── HERO ── */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-orange-600 via-orange-500 to-amber-400">
-          <div className="absolute inset-0 opacity-[.06]" style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
-          <div className="absolute -top-16 -right-16 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-14 relative z-10">
-            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
-              <div className="text-white">
-                <div className="flex items-center gap-2 mb-3 text-white/70 text-xs font-bold uppercase tracking-widest">
-                  <StoreIcon className="w-4 h-4" /> PetMatch Marketplace
+        <section className="relative overflow-hidden bg-gradient-to-br from-red-600 via-orange-500 to-amber-400 py-8 sm:py-10">
+          <div className="absolute inset-0 opacity-[.06]" style={{backgroundImage:"radial-gradient(circle,white 1px,transparent 1px)",backgroundSize:"22px 22px"}}/>
+          <div className="absolute -top-16 -right-16 w-60 h-60 rounded-full bg-orange-200/25 blur-3xl pointer-events-none"/>
+          <div className="absolute -bottom-10 -left-10 w-44 h-44 rounded-full bg-red-900/30 blur-3xl pointer-events-none"/>
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+              {/* Left */}
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center flex-shrink-0 shadow-lg">
+                  <StoreIcon className="w-7 h-7 text-white drop-shadow"/>
                 </div>
-                <h1 className="st-display text-5xl sm:text-6xl font-black leading-tight mb-3">
-                  Pet Store.<br />
-                  <em className="not-italic text-amber-200">India's Own.</em>
-                </h1>
-                <p className="text-white/70 max-w-md text-base leading-relaxed mb-6">
-                  Buy & sell pet products for dogs, cats, fish and birds — all prices in ₹ INR.
-                </p>
-
-                {/* Tab bar */}
-                <div className="flex gap-2 flex-wrap">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-200">PetMatch</span>
+                    <span className="w-1 h-1 rounded-full bg-white/40"/>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Marketplace</span>
+                  </div>
+                  <h1 className="st-display text-3xl sm:text-4xl font-black text-white leading-none">Pet Store 🛒</h1>
+                  <p className="text-white/65 text-xs mt-1">{products.length || "500+"} products · Buy &amp; sell · All prices in ₹ INR</p>
+                </div>
+              </div>
+              {/* Right */}
+              <div className="flex flex-col gap-2.5 sm:items-end">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   {([
-                    { id: "shop",   label: "Shop",      emoji: "🛒" },
-                    { id: "sell",   label: "Sell",      emoji: "🏪" },
-                    { id: "orders", label: "My Orders",  emoji: "📦" },
-                  ] as const).map(({ id, label, emoji }) => (
-                    <button key={id} onClick={() => setTab(id)}
-                      className={cn("flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold border-2 transition-all",
-                        tab === id ? "bg-white text-orange-600 border-white" : "bg-white/15 text-white border-white/30 hover:bg-white/25")}>
+                    {id:"shop",  label:"Shop",    emoji:"🛒"},
+                    {id:"sell",  label:"Sell",    emoji:"🏪"},
+                    {id:"orders",label:"Orders",  emoji:"📦"},
+                  ] as const).map(({id,label,emoji})=>(
+                    <button key={id} onClick={()=>setTab(id)}
+                      className={cn("flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border-2 transition-all shadow-sm",
+                        tab===id?"bg-white text-red-600 border-white shadow-red-200":"bg-white/15 text-white border-white/25 hover:bg-white/25 backdrop-blur-sm")}>
                       {emoji} {label}
                     </button>
                   ))}
                 </div>
-              </div>
-
-              {/* Stats */}
-              <div className="flex gap-3">
-                {[
-                  { label: "Products",   value: products.length || "500+" },
-                  { label: "In Cart",    value: cartCount },
-                  { label: "Favourites", value: favorites.size },
-                ].map(({ label, value }) => (
-                  <div key={label} className="bg-white/15 backdrop-blur-sm border border-white/20 rounded-2xl px-5 py-4 text-white text-center min-w-[80px]">
-                    <p className="st-display text-2xl font-black">{value}</p>
-                    <p className="text-[10px] text-white/60 font-bold uppercase tracking-wider mt-0.5">{label}</p>
+                {cartCount > 0 && (
+                  <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-white/30 text-xs text-white font-bold">
+                    <ShoppingCart className="w-3.5 h-3.5"/> {cartCount} item{cartCount!==1?"s":""} in cart
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>
-          <svg className="absolute bottom-0 left-0 w-full" viewBox="0 0 1440 28" preserveAspectRatio="none">
-            <path d="M0,28 C480,0 960,0 1440,28 L1440,28 L0,28 Z" fill="#FAFAF7" />
-          </svg>
+          <svg className="absolute bottom-0 left-0 w-full" viewBox="0 0 1440 24" preserveAspectRatio="none"><path d="M0,24 C480,4 960,4 1440,24 L1440,24 L0,24 Z" fill="#FAFAF7"/></svg>
         </section>
 
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">

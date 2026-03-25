@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Heart, Menu, X } from "lucide-react";
 import { useUser, useClerk, SignedIn, SignedOut } from "@clerk/clerk-react";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -9,6 +9,7 @@ import NotificationWidget from "@/components/NotificationWidget";
 export default function Header() {
   const [menuOpen,  setMenuOpen]  = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const { pathname } = useLocation();
 
   const { user }    = useUser();
   const { signOut } = useClerk();
@@ -53,15 +54,24 @@ export default function Header() {
 
           {/* Desktop nav */}
           <div className="hidden lg:flex items-center gap-1">
-            {navItems.map(item => (
-              <Link
-                key={item.href}
-                to={item.href}
-                className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-dogs rounded-lg hover:bg-orange-50 transition-colors"
-              >
-                {item.label}
-              </Link>
-            ))}
+            {navItems.map(item => {
+              const isActive = item.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    isActive
+                      ? "text-dogs bg-orange-50 font-semibold border-b-2 border-dogs"
+                      : "text-gray-700 hover:text-dogs hover:bg-orange-50"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
           </div>
 
           {/* Right section */}
@@ -125,16 +135,25 @@ export default function Header() {
         {menuOpen && (
           <div className="lg:hidden border-t border-gray-100 bg-gray-50">
             <div className="container mx-auto px-4 py-4 flex flex-col gap-2">
-              {navItems.map(item => (
-                <Link
-                  key={item.href}
-                  to={item.href}
-                  onClick={() => setMenuOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-dogs rounded-lg hover:bg-white transition-colors"
-                >
-                  {item.label}
-                </Link>
-              ))}
+              {navItems.map(item => {
+                const isActive = item.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    to={item.href}
+                    onClick={() => setMenuOpen(false)}
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                      isActive
+                        ? "text-dogs bg-orange-100 font-semibold"
+                        : "text-gray-700 hover:text-dogs hover:bg-white"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
 
               <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200">
                 <SignedOut>

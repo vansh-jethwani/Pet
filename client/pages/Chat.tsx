@@ -1014,39 +1014,9 @@ export default function ChatPage() {
       <div className="ch min-h-screen flex flex-col bg-gradient-to-br from-orange-50 via-white to-amber-50">
         <Header />
 
-        <section className="relative overflow-hidden bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500 py-10 sm:py-14">
-          <div className="absolute inset-0 opacity-[.07]" style={{ backgroundImage: "radial-gradient(circle,white 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-              <div className="text-white">
-                <div className="flex items-center gap-2 mb-2 opacity-75 text-xs font-bold uppercase tracking-widest">
-                  <MessageSquare className="w-4 h-4" /> Pet Conversations
-                </div>
-                <h1 className="text-4xl sm:text-5xl font-black mb-2">Messages</h1>
-                <p className="text-white/70 text-sm max-w-md">Chat with pet owners &amp; seekers. Voice and video calls built-in.</p>
-              </div>
-              <div className="flex gap-3">
-                {[{ label: "Chats", val: rooms.length }, { label: "Unread", val: totalUnread }].map(({ label, val }) => (
-                  <div key={label} className="bg-white/15 border border-white/20 backdrop-blur-sm rounded-2xl px-5 py-3 text-white text-center min-w-[80px]">
-                    <p className="text-3xl font-black">{val}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-white/60 mt-0.5">{label}</p>
-                  </div>
-                ))}
-                <div className={cn("bg-white/15 border backdrop-blur-sm rounded-2xl px-4 py-3 text-center min-w-[80px]", connected ? "border-green-400/40" : "border-red-400/40")}>
-                  {connected ? <Wifi className="w-5 h-5 mx-auto text-green-300 mb-1" /> : <WifiOff className="w-5 h-5 mx-auto text-red-300 mb-1" />}
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">{connected ? "Live" : "Away"}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <svg className="absolute bottom-0 left-0 w-full" viewBox="0 0 1440 28" preserveAspectRatio="none">
-            <path d="M0,28 C480,0 960,0 1440,28 L1440,28 L0,28 Z" fill="rgb(255,247,237)" />
-          </svg>
-        </section>
-
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1">
+        <div className="container mx-auto px-6 py-6 flex-1">
           <div className="bg-white rounded-3xl shadow-xl border border-orange-100 overflow-hidden flex"
-            style={{ height: "calc(100vh - 272px)", minHeight: 520 }}>
+            style={{ height: "calc(100vh - 120px)", minHeight: 520 }}>
 
             {/* ════ SIDEBAR ════ */}
             <div className={cn(

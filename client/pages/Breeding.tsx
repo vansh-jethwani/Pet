@@ -68,6 +68,53 @@ const U = (id: string) => `https://images.unsplash.com/photo-${id}?w=400&h=400&f
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
+/* ─── Comprehensive Breed Lists ───────────────────────────────────────────── */
+const ALL_DOG_BREEDS = [
+  "Afghan Hound","Airedale Terrier","Akita","Alaskan Malamute","American Bulldog",
+  "American Eskimo Dog","American Foxhound","American Pit Bull Terrier","American Staffordshire Terrier",
+  "Australian Cattle Dog","Australian Shepherd","Australian Terrier","Basenji","Basset Hound",
+  "Beagle","Bearded Collie","Belgian Malinois","Belgian Tervuren","Bernese Mountain Dog",
+  "Bichon Frise","Bloodhound","Border Collie","Border Terrier","Borzoi","Boston Terrier",
+  "Boxer","Boykin Spaniel","Briard","Brittany","Brussels Griffon","Bull Terrier",
+  "Bulldog","Bullmastiff","Cairn Terrier","Cane Corso","Cardigan Welsh Corgi",
+  "Cavalier King Charles Spaniel","Chesapeake Bay Retriever","Chihuahua","Chinese Crested",
+  "Chinese Shar-Pei","Chow Chow","Clumber Spaniel","Cocker Spaniel","Collie",
+  "Dachshund","Dalmatian","Dandie Dinmont Terrier","Doberman Pinscher","Dogo Argentino",
+  "English Setter","English Springer Spaniel","English Toy Spaniel","Field Spaniel",
+  "Finnish Spitz","Flat-Coated Retriever","French Bulldog","German Pinscher",
+  "German Shepherd","German Shorthaired Pointer","German Wirehaired Pointer","Giant Schnauzer",
+  "Glen of Imaal Terrier","Golden Retriever","Gordon Setter","Great Dane","Great Pyrenees",
+  "Greater Swiss Mountain Dog","Greyhound","Harrier","Havanese","Ibizan Hound",
+  "Irish Setter","Irish Terrier","Irish Water Spaniel","Irish Wolfhound","Italian Greyhound",
+  "Japanese Chin","Keeshond","Kerry Blue Terrier","Komondor","Kuvasz","Labrador Retriever",
+  "Lakeland Terrier","Leonberger","Lhasa Apso","Maltese","Manchester Terrier","Mastiff",
+  "Miniature Bull Terrier","Miniature Pinscher","Miniature Schnauzer","Neapolitan Mastiff",
+  "Newfoundland","Norfolk Terrier","Norwegian Elkhound","Norwich Terrier","Nova Scotia Duck Tolling Retriever",
+  "Old English Sheepdog","Otterhound","Papillon","Parson Russell Terrier","Pekingese",
+  "Pembroke Welsh Corgi","Petit Basset Griffon Vendeen","Pharaoh Hound","Plott","Pointer",
+  "Polish Lowland Sheepdog","Pomeranian","Poodle","Portuguese Water Dog","Pug","Puli",
+  "Redbone Coonhound","Rhodesian Ridgeback","Rottweiler","Saint Bernard","Saluki",
+  "Samoyed","Schipperke","Scottish Deerhound","Scottish Terrier","Sealyham Terrier",
+  "Shetland Sheepdog","Shiba Inu","Shih Tzu","Siberian Husky","Silky Terrier",
+  "Skye Terrier","Smooth Fox Terrier","Soft Coated Wheaten Terrier","Spinone Italiano",
+  "Staffordshire Bull Terrier","Standard Schnauzer","Sussex Spaniel","Tibetan Mastiff",
+  "Tibetan Spaniel","Tibetan Terrier","Toy Fox Terrier","Vizsla","Weimaraner",
+  "Welsh Springer Spaniel","Welsh Terrier","West Highland White Terrier","Whippet",
+  "Wire Fox Terrier","Wirehaired Pointing Griffon","Xoloitzcuintli","Yorkshire Terrier",
+];
+
+const ALL_CAT_BREEDS = [
+  "Abyssinian","American Bobtail","American Curl","American Shorthair","American Wirehair",
+  "Balinese","Bengal","Birman","Bombay","British Shorthair","Burmese","Burmilla",
+  "Chartreux","Chausie","Colorpoint Shorthair","Cornish Rex","Devon Rex","Egyptian Mau",
+  "European Burmese","Exotic Shorthair","Havana Brown","Himalayan","Japanese Bobtail",
+  "Javanese","Khao Manee","Korat","LaPerm","Maine Coon","Manx","Munchkin",
+  "Nebelung","Norwegian Forest Cat","Ocicat","Oriental","Persian","Peterbald",
+  "Pixiebob","Ragamuffin","Ragdoll","Russian Blue","Savannah","Scottish Fold",
+  "Selkirk Rex","Siamese","Siberian","Singapura","Snowshoe","Somali","Sphynx",
+  "Thai","Tonkinese","Toyger","Turkish Angora","Turkish Van","York Chocolate",
+];
+
 const ALL_PETS: Pet[] = [
   { id:1, name:"Luna", species:"dog", breed:"Golden Retriever", age:3, gender:"Female", location:"San Francisco, CA", city:"San Francisco", owner:"Sarah J.", ownerAvatar:"👩🏻", ownerVerified:true, vaccinated:true, pedigree:true, photo:"https://images.unsplash.com/photo-1588022274642-f238f77ec193?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0", fallbackEmoji:"🐕", description:"Champion bloodline Golden with a gentle soul. AKC registered, OFA certified, loves kids and long hikes.", traits:["Playful","Gentle","Loyal","Smart"], weight:"28 kg", color:"Golden", score:96, healthCerts:["OFA Hips","OFA Elbows","CERF Eyes"], joinedDate:"Feb 2024" },
   { id:2, name:"Max", species:"dog", breed:"German Shepherd", age:4, gender:"Male", location:"Los Angeles, CA", city:"Los Angeles", owner:"John S.", ownerAvatar:"👨🏽", ownerVerified:true, vaccinated:true, pedigree:true, photo:"https://www.carecredit.com/sites/cc/image/german_shepherd_dog_guide.jpg", fallbackEmoji:"🐕", description:"Award-winning Schutzhund dog. Superb structure, rock-solid temperament across generations.", traits:["Protective","Alert","Confident","Trainable"], weight:"35 kg", color:"Black & Tan", score:91, healthCerts:["OFA Hips","DM Clear","MDR1 Clear"], joinedDate:"Jan 2024" },
@@ -247,7 +294,8 @@ export default function Breeding() {
   const [showForm, setShowForm] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoUploadError, setPhotoUploadError] = useState<string|null>(null);
-  const [form, setForm] = useState({ name:"", species:"dog" as Species, breed:"", age:"", gender:"Male" as "Male"|"Female", city:"", location:"", photo:"", description:"", weight:"", color:"", traits:"", healthCerts:"", vaccinated:true, pedigree:false });
+  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [form, setForm] = useState({ name:"", species:"dog" as Species, breed:"", age:"", gender:"Male" as "Male"|"Female", location:"", photo:"", description:"", weight:"", color:"", traits:"", healthCerts:"", vaccinated:true, pedigree:false });
 
   const normalizePet = (pet: any): Pet => {
     const id = pet.id ?? pet._id ?? Date.now().toString();
@@ -272,8 +320,6 @@ export default function Breeding() {
     loadPets();
   }, []);
 
-  const DOG_BREEDS_DYNAMIC = [...new Set(allPets.filter(p=>p.species==="dog").map(p=>p.breed))];
-  const CAT_BREEDS_DYNAMIC = [...new Set(allPets.filter(p=>p.species==="cat").map(p=>p.breed))];
   const CITY_OPTIONS = [...new Set(allPets.map(p=>p.city))];
 
   const [speciesFilter, setSpeciesFilter] = useState<"all"|Species>("all");
@@ -285,8 +331,29 @@ export default function Breeding() {
   const [fVacc, setFVacc] = useState(false);
   const [fPedigree, setFPedigree] = useState(false);
 
-  const breedOptions = speciesFilter==="cat" ? CAT_BREEDS_DYNAMIC : speciesFilter==="dog" ? DOG_BREEDS_DYNAMIC : [...DOG_BREEDS_DYNAMIC,...CAT_BREEDS_DYNAMIC];
+  // Comprehensive breed options for form + filter
+  const breedOptions = speciesFilter==="cat" ? ALL_CAT_BREEDS : speciesFilter==="dog" ? ALL_DOG_BREEDS : [...ALL_DOG_BREEDS,...ALL_CAT_BREEDS];
+  const formBreedOptions = form.species==="cat" ? ALL_CAT_BREEDS : ALL_DOG_BREEDS;
   useEffect(()=>{ setFBreed(""); },[speciesFilter]);
+
+  // Load persisted matches from MongoDB on mount
+  useEffect(()=>{
+    if(!user?.id) return;
+    setMatchesLoading(true);
+    fetch(`/api/breeding-matches?clerkUserId=${encodeURIComponent(user.id)}`)
+      .then(r=>r.ok?r.json():[])
+      .then((data:Array<{petId:string}>)=>{
+        if(Array.isArray(data)&&data.length>0){
+          const ids=data.map(m=>m.petId);
+          setLiked(ids);
+          setMatches(ids.map(id=>({petId:id,messages:[]})));
+          // Remove already-liked pets from deck
+          setDeck(prev=>prev.filter(p=>!ids.includes(p.id as string)));
+        }
+      })
+      .catch(()=>{})
+      .finally(()=>setMatchesLoading(false));
+  },[user?.id]);
 
   const filteredDeck = deck.filter(p=>{
     if(speciesFilter!=="all"&&p.species!==speciesFilter) return false;
@@ -304,7 +371,7 @@ export default function Breeding() {
   const next = filteredDeck[1];
   const flash = (t:"like"|"pass"|"save") => { setFeedback(t); setTimeout(()=>setFeedback(null),750); };
 
-  // doLike — just adds to matches, no chat widget opened
+  // doLike — adds to matches and persists to MongoDB
   const doLike = useCallback(()=>{
     if(!current) return;
     setSwipeDir("right");
@@ -313,9 +380,13 @@ export default function Breeding() {
       setMatches(p=>[...p,{petId:current.id,messages:[]}]);
       setDeck(d=>d.filter(x=>x.id!==current.id));
       setSwipeDir(null);
+      // Persist match to MongoDB
+      if(user?.id){
+        fetch("/api/breeding-matches",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({clerkUserId:user.id,petId:current.id.toString()})}).catch(()=>{});
+      }
     },420);
     flash("like");
-  },[current]);
+  },[current,user?.id]);
 
   const doPass = useCallback(()=>{
     if(!current) return;
@@ -356,18 +427,24 @@ export default function Breeding() {
     setLiked(prev=>prev.filter(id=>id!==petId));
     setSaved(prev=>prev.filter(id=>id!==petId));
     if(activeChat===petId) setActiveChat(null);
+    // Remove from MongoDB
+    if(user?.id){
+      fetch("/api/breeding-matches",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({clerkUserId:user.id,petId:petId.toString()})}).catch(()=>{});
+    }
   };
 
   const submitMyPet = async(e:React.FormEvent)=>{
     e.preventDefault();
-    if(!form.name||!form.breed||!form.age||!form.city||!form.location||!form.photo) return;
-    const payload = { name:form.name, species:form.species, breed:form.breed, age:parseInt(form.age,10), gender:form.gender, location:form.location, city:form.city, owner:currentOwner, ownerClerkId:user?.id ?? "", ownerAvatar:ownerAvatar, ownerVerified:Boolean(user), vaccinated:form.vaccinated, pedigree:form.pedigree, photo:form.photo, description:form.description||"Looking for the perfect match!", traits:form.traits.split(",").map(t=>t.trim()).filter(Boolean), weight:form.weight||"—", color:form.color||"—", score:0, healthCerts:form.healthCerts.split(",").map(c=>c.trim()).filter(Boolean), joinedDate:new Date().toLocaleDateString("en-US",{month:"short",year:"numeric"}) };
+    if(!form.name||!form.breed||!form.age||!form.location||!form.photo) return;
+    // Auto-derive city from the last word(s) of location e.g. "Austin, TX" → "Austin"
+    const derivedCity = form.location.split(",")[0].trim() || form.location;
+    const payload = { name:form.name, species:form.species, breed:form.breed, age:parseInt(form.age,10), gender:form.gender, location:form.location, city:derivedCity, owner:currentOwner, ownerClerkId:user?.id ?? "", ownerAvatar:ownerAvatar, ownerVerified:Boolean(user), vaccinated:form.vaccinated, pedigree:form.pedigree, photo:form.photo, description:form.description||"Looking for the perfect match!", traits:form.traits.split(",").map(t=>t.trim()).filter(Boolean), weight:form.weight||"—", color:form.color||"—", score:0, healthCerts:form.healthCerts.split(",").map(c=>c.trim()).filter(Boolean), joinedDate:new Date().toLocaleDateString("en-US",{month:"short",year:"numeric"}) };
     try {
       const res = await fetch("/api/pets",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
       if(!res.ok) throw new Error("Failed");
       const created = normalizePet(await res.json());
       setMyPet(created); setAllPets(prev=>[created,...prev]); setDeck(prev=>[created,...prev]); setShowForm(false);
-      setForm({name:"",species:"dog" as Species,breed:"",age:"",gender:"Male" as "Male"|"Female",city:"",location:"",photo:"",description:"",weight:"",color:"",traits:"",healthCerts:"",vaccinated:true,pedigree:false});
+      setForm({name:"",species:"dog" as Species,breed:"",age:"",gender:"Male" as "Male"|"Female",location:"",photo:"",description:"",weight:"",color:"",traits:"",healthCerts:"",vaccinated:true,pedigree:false});
     } catch { alert("Could not save pet. Please try again."); }
   };
 
@@ -392,34 +469,50 @@ export default function Breeding() {
         <Header/>
 
         {/* HERO */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-orange-600 via-orange-500 to-amber-400 pt-10 pb-16">
-          <div className="absolute inset-0 opacity-[0.07]" style={{backgroundImage:"radial-gradient(circle,white 1px,transparent 1px)",backgroundSize:"26px 26px"}}/>
-          <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/10 blur-3xl"/>
-          <div className="absolute -bottom-24 -left-12 w-72 h-72 rounded-full bg-orange-700/20 blur-3xl"/>
+        <section className="relative overflow-hidden bg-gradient-to-br from-orange-700 via-orange-500 to-amber-400 py-8 sm:py-10">
+          {/* Decorations */}
+          <div className="absolute inset-0 opacity-[.06]" style={{backgroundImage:"radial-gradient(circle,white 1px,transparent 1px)",backgroundSize:"22px 22px"}}/>
+          <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-yellow-300/25 blur-3xl pointer-events-none"/>
+          <div className="absolute -bottom-10 -left-10 w-52 h-52 rounded-full bg-orange-900/30 blur-3xl pointer-events-none"/>
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-8">
-              <div className="text-white">
-                <div className="flex items-center gap-2 mb-3 opacity-75"><Heart className="w-4 h-4 fill-white"/><span className="text-xs font-bold uppercase tracking-[.15em]">Breeding Match</span></div>
-                <h1 className="bf-display text-5xl sm:text-6xl font-black leading-[1.05] mb-4">Find Your Pet's<br/><em className="not-italic text-amber-200">Perfect Match.</em></h1>
-                <p className="text-white/70 text-sm sm:text-base max-w-sm leading-relaxed mb-4">Swipe through verified dog and cat profiles, view health certifications, and connect with trusted owners.</p>
-                <div className="flex gap-2 flex-wrap">
-                  {([["all","🐾","All Pets"],["dog","🐕","Dogs"],["cat","🐱","Cats"]] as const).map(([sp,em,label])=>(
-                    <button key={sp} onClick={()=>setSpeciesFilter(sp)} className={cn("flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold border-2 transition-all",speciesFilter===sp?"bg-white text-orange-600 border-white":"bg-white/15 text-white border-white/30 hover:bg-white/25")}>{em} {label}</button>
-                  ))}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+              {/* Left */}
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center flex-shrink-0 shadow-lg">
+                  <Heart className="w-7 h-7 text-white fill-white drop-shadow"/>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-200">PetMatch</span>
+                    <span className="w-1 h-1 rounded-full bg-amber-300/70"/>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Verified Profiles</span>
+                  </div>
+                  <h1 className="bf-display text-3xl sm:text-4xl font-black text-white leading-none">Breeding Match 🐾</h1>
+                  <p className="text-white/65 text-xs mt-1">Swipe · Like · Connect with trusted owners</p>
                 </div>
               </div>
-              <div className="flex gap-3">
-                {[{label:"Matches",val:liked.length,Icon:Heart},{label:"Saved",val:savedPets.length,Icon:Bookmark},{label:"In Pool",val:filteredDeck.length,Icon:Users}].map(({label,val,Icon})=>(
-                  <div key={label} className="bg-white/15 backdrop-blur-sm border border-white/20 rounded-2xl px-4 py-3 text-white text-center min-w-[76px]">
-                    <Icon className="w-4 h-4 mx-auto mb-1 fill-white"/>
-                    <p className="bf-display text-2xl font-black">{val}</p>
-                    <p className="text-[10px] text-white/55 font-semibold uppercase tracking-wider">{label}</p>
-                  </div>
-                ))}
+              {/* Right */}
+              <div className="flex flex-col gap-2 sm:items-end">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {([["all","🐾","All Pets"],["dog","🐕","Dogs"],["cat","🐱","Cats"]] as const).map(([sp,em,label])=>(
+                    <button key={sp} onClick={()=>setSpeciesFilter(sp)}
+                      className={cn("flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border-2 transition-all shadow-sm",
+                        speciesFilter===sp?"bg-white text-orange-600 border-white shadow-orange-200":"bg-white/15 text-white border-white/25 hover:bg-white/25 backdrop-blur-sm"
+                      )}>{em} {label}</button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-white/70">
+                  <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg backdrop-blur-sm">
+                    <Heart className="w-3 h-3 fill-rose-300 text-rose-300"/><span className="font-bold text-white">{liked.length}</span> matches
+                  </span>
+                  <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg backdrop-blur-sm">
+                    <Users className="w-3 h-3 text-amber-300"/><span className="font-bold text-white">{filteredDeck.length}</span> in pool
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-          <svg className="absolute bottom-0 left-0 w-full" viewBox="0 0 1440 32" preserveAspectRatio="none"><path d="M0,32 C480,0 960,0 1440,32 L1440,32 L0,32 Z" fill="#FEF7ED"/></svg>
+          <svg className="absolute bottom-0 left-0 w-full" viewBox="0 0 1440 24" preserveAspectRatio="none"><path d="M0,24 C360,4 1080,4 1440,24 L1440,24 L0,24 Z" fill="#FEF7ED"/></svg>
         </section>
 
         {/* TAB BAR */}
@@ -487,9 +580,8 @@ export default function Breeding() {
                     {[{label:"Pet Name",key:"name",type:"text",ph:"e.g. Max"},{label:"Age (yrs)",key:"age",type:"number",ph:"e.g. 3"}].map(({label,key,type,ph})=>(
                       <div key={key}><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">{label}</label><input type={type} value={(form as any)[key]} onChange={e=>setForm({...form,[key]:e.target.value})} placeholder={ph} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400"/></div>
                     ))}
-                    <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Breed</label><select value={form.breed} onChange={e=>setForm({...form,breed:e.target.value})} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"><option value="">Select breed</option>{breedOptions.map(b=><option key={b}>{b}</option>)}</select></div>
+                    <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Breed</label><select value={form.breed} onChange={e=>setForm({...form,breed:e.target.value})} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"><option value="">Select breed</option>{formBreedOptions.map(b=><option key={b} value={b}>{b}</option>)}</select></div>
                     <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Location</label><input value={form.location} onChange={e=>setForm({...form,location:e.target.value})} placeholder="e.g. Austin, TX" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400"/></div>
-                    <div><label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">City</label><select value={form.city} onChange={e=>setForm({...form,city:e.target.value})} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"><option value="">Select city</option>{CITY_OPTIONS.map(c=><option key={c}>{c}</option>)}</select></div>
                     <div>
                       <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Upload Photo</label>
                       <input type="file" accept="image/*" onChange={async(e)=>{
@@ -600,11 +692,11 @@ export default function Breeding() {
                           {current&&<SwipeCard key={current.id} pet={current} isTop swipeDir={swipeDir} onLike={doLike} onPass={doPass} onSave={doSave} isSaved={saved.includes(current.id)}/>}
                         </div>
                         <div className="flex items-center justify-center gap-4 mt-7">
-                          <button onClick={doPass} className="w-16 h-16 rounded-full bg-white border-2 border-red-200 flex items-center justify-center text-red-400 shadow-md hover:shadow-lg hover:scale-110 hover:border-red-400 transition-all"><X className="w-7 h-7"/></button>
-                          <button onClick={doSave} className={cn("w-14 h-14 rounded-full border-2 flex items-center justify-center shadow-md hover:shadow-lg hover:scale-110 transition-all",current&&saved.includes(current.id)?"bg-yellow-400 border-yellow-400 text-white":"bg-white border-yellow-300 text-yellow-500 hover:border-yellow-400")}><Bookmark className="w-5 h-5 fill-current"/></button>
-                          <button onClick={doLike} className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white shadow-lg shadow-orange-300 hover:scale-110 transition-all bf-pls"><Heart className="w-9 h-9 fill-white"/></button>
-                          <button onClick={doSave} className="w-14 h-14 rounded-full bg-white border-2 border-sky-200 text-sky-400 flex items-center justify-center shadow-md hover:shadow-lg hover:scale-110 hover:border-sky-400 transition-all"><Star className="w-5 h-5 fill-current"/></button>
-                          <button onClick={()=>setDeck(allPets.filter(p=>!liked.includes(p.id)))} className="w-14 h-14 rounded-full bg-white border-2 border-gray-200 text-gray-400 flex items-center justify-center shadow-md hover:shadow-lg hover:scale-110 hover:border-gray-400 transition-all"><RefreshCw className="w-5 h-5"/></button>
+                          <button onClick={doPass} title="Pass" className="w-16 h-16 rounded-full bg-white border-2 border-red-200 flex items-center justify-center text-red-400 shadow-md hover:shadow-lg hover:scale-110 hover:border-red-400 transition-all"><X className="w-7 h-7"/></button>
+                          <button onClick={doSave} title="Save for later" className={cn("w-14 h-14 rounded-full border-2 flex items-center justify-center shadow-md hover:shadow-lg hover:scale-110 transition-all",current&&saved.includes(current.id)?"bg-yellow-400 border-yellow-400 text-white":"bg-white border-yellow-300 text-yellow-500 hover:border-yellow-400")}><Bookmark className="w-5 h-5 fill-current"/></button>
+                          <button onClick={doLike} title="Like" className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white shadow-lg shadow-orange-300 hover:scale-110 transition-all bf-pls"><Heart className="w-9 h-9 fill-white"/></button>
+                          <button onClick={()=>setView("matches")} title="View Matches" className="w-14 h-14 rounded-full bg-white border-2 border-sky-200 text-sky-400 flex items-center justify-center shadow-md hover:shadow-lg hover:scale-110 hover:border-sky-400 transition-all"><Star className="w-5 h-5 fill-current"/></button>
+                          <button onClick={()=>{setDeck(allPets.filter(p=>!liked.includes(p.id)));resetFilters();}} title="Refresh deck" className="w-14 h-14 rounded-full bg-white border-2 border-gray-200 text-gray-400 flex items-center justify-center shadow-md hover:shadow-lg hover:scale-110 hover:border-gray-400 transition-all"><RefreshCw className="w-5 h-5"/></button>
                         </div>
                         <p className="text-center text-xs text-gray-300 mt-4 font-medium">← Pass · 💚 Like · 🔖 Save · Drag to swipe</p>
                       </div>

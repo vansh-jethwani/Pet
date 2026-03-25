@@ -1307,65 +1307,43 @@ export default function Hosting() {
         )}
 
         {/* ── HERO ── */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-orange-600 via-orange-500 to-amber-400 pt-14 pb-20">
-          <div className="absolute inset-0 ht-dot-bg pointer-events-none" />
-          <div className="absolute -top-20 -right-20 w-80 h-80 bg-white/10 rounded-full blur-3xl" />
-          <div className="absolute -bottom-16 -left-12 w-64 h-64 bg-orange-700/20 rounded-full blur-3xl" />
-
+        <section className="relative overflow-hidden bg-gradient-to-br from-amber-600 via-amber-500 to-yellow-400 py-8 sm:py-10">
+          <div className="absolute inset-0 opacity-[.06]" style={{backgroundImage:"radial-gradient(circle,white 1px,transparent 1px)",backgroundSize:"20px 20px"}}/>
+          <div className="absolute -top-16 -right-16 w-60 h-60 rounded-full bg-yellow-200/30 blur-3xl pointer-events-none"/>
+          <div className="absolute -bottom-10 -left-10 w-44 h-44 rounded-full bg-amber-900/25 blur-3xl pointer-events-none"/>
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="max-w-3xl">
-              <div className="flex items-center gap-2 mb-4 text-white/70 text-xs font-bold uppercase tracking-widest">
-                <PawPrint className="w-4 h-4" /> Pet Hosting Across India
-              </div>
-              <h1 className="ht-display text-5xl sm:text-6xl font-bold text-white leading-tight mb-4">
-                Your Pet's<br />
-                <span className="text-amber-200">Home Away</span><br />
-                From Home
-              </h1>
-              <p className="text-white/75 text-base sm:text-lg max-w-md mb-8 leading-relaxed">
-                Find trusted pet hosts across 50+ Indian cities. Vetted, caring, affordable — from ₹200/day.
-              </p>
-
-              {/* Search bar */}
-              <div className="flex gap-2 flex-col sm:flex-row max-w-xl">
-                <div className="relative flex-1">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by city, area, name…"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3.5 rounded-2xl text-sm bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-white/50 shadow-lg"
-                  />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+              {/* Left */}
+              <div className="flex items-center gap-4 flex-shrink-0">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center flex-shrink-0 shadow-lg">
+                  <PawPrint className="w-7 h-7 text-white drop-shadow"/>
                 </div>
-                <button
-                  onClick={() => user ? setShowModal(true) : alert("Please sign in to list your home")}
-                  className="flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-white text-orange-600 font-bold text-sm hover:bg-orange-50 transition-all shadow-lg flex-shrink-0"
-                >
-                  <Plus className="w-4 h-4" /> List My Home
-                </button>
-              </div>
-
-              {/* Stats */}
-              <div className="flex gap-6 mt-8 flex-wrap">
-                {[
-                  { val: `${listings.length || "100"}+`, label: "Trusted Hosts" },
-                  { val: "50+", label: "Indian Cities" },
-                  { val: "₹200+", label: "Starting/Day" },
-                  { val: "5★", label: "Avg Rating" },
-                ].map(({ val, label }) => (
-                  <div key={label} className="text-white">
-                    <p className="ht-display text-2xl font-bold">{val}</p>
-                    <p className="text-white/60 text-xs font-semibold uppercase tracking-wider">{label}</p>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-yellow-200">50+ Cities</span>
+                    <span className="w-1 h-1 rounded-full bg-white/40"/>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/60">from ₹200/day</span>
                   </div>
-                ))}
+                  <h1 className="ht-display text-3xl sm:text-4xl font-black text-white leading-none">Pet Hosting 🏠</h1>
+                  <p className="text-white/65 text-xs mt-1">Trusted hosts across India · Verified &amp; Rated</p>
+                </div>
+              </div>
+              {/* Right */}
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
+                  <input type="text" placeholder="Search city, area, host…"
+                    value={search} onChange={e => setSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-300 shadow-md"/>
+                </div>
+                <button onClick={() => user ? setShowModal(true) : alert("Please sign in to list your home")}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white text-amber-700 font-black text-sm hover:bg-amber-50 transition-all shadow-md flex-shrink-0">
+                  <Plus className="w-4 h-4"/> List My Home
+                </button>
               </div>
             </div>
           </div>
-
-          <svg className="absolute bottom-0 left-0 w-full" viewBox="0 0 1440 32" preserveAspectRatio="none">
-            <path d="M0,32 C480,0 960,0 1440,32 L1440,32 L0,32 Z" fill="#FDFCF9" />
-          </svg>
+          <svg className="absolute bottom-0 left-0 w-full" viewBox="0 0 1440 24" preserveAspectRatio="none"><path d="M0,24 C360,4 1080,4 1440,24 L1440,24 L0,24 Z" fill="#FDFCF9"/></svg>
         </section>
 
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">

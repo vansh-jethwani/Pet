@@ -657,49 +657,47 @@ export default function Vets() {
       )}
 
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-red-600 via-rose-500 to-orange-500">
-        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
-        <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 rounded-full bg-red-800/20 blur-3xl" />
-
-        <div className="relative container mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-10">
-            <div className="text-white max-w-xl">
-              <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm border border-white/20 rounded-full px-4 py-1.5 text-sm font-semibold mb-5">
-                <Zap className="w-3.5 h-3.5" /> Connect in minutes
+      <section className="relative overflow-hidden bg-gradient-to-br from-red-700 via-rose-500 to-orange-400 py-8 sm:py-10">
+        <div className="absolute inset-0 opacity-[.06]" style={{backgroundImage:"radial-gradient(circle,white 1px,transparent 1px)",backgroundSize:"22px 22px"}}/>
+        <div className="absolute -top-16 -right-16 w-60 h-60 rounded-full bg-rose-200/20 blur-3xl pointer-events-none"/>
+        <div className="absolute -bottom-10 -left-10 w-44 h-44 rounded-full bg-red-900/30 blur-3xl pointer-events-none"/>
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+            {/* Left */}
+            <div className="flex items-center gap-4 flex-shrink-0">
+              <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center flex-shrink-0 shadow-lg">
+                <Stethoscope className="w-7 h-7 text-white drop-shadow"/>
               </div>
-              <h1 className="text-4xl sm:text-5xl font-black leading-tight mb-4">
-                Expert Vet Care,<br />
-                <span className="text-white/80">Wherever You Are</span>
-              </h1>
-              <p className="text-white/70 text-base sm:text-lg leading-relaxed mb-8 max-w-sm">
-                Book video, phone, or in-person consultations with licensed veterinarians.
-              </p>
-              <div className="relative max-w-sm">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input type="text" placeholder="Search by name or specialty…"
-                  value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl text-sm bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-white/50 shadow-lg"
-                />
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-rose-200">Licensed Vets</span>
+                  <span className="w-1 h-1 rounded-full bg-white/40"/>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Video · Phone · In-Person</span>
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-black text-white leading-none">Expert Vet Care 🩺</h1>
+                <p className="text-white/65 text-xs mt-1">Book consultations with verified veterinarians</p>
               </div>
             </div>
-
-            {/* FIX: stats now use real computed values */}
-            <div className="grid grid-cols-2 gap-3 lg:gap-4">
-              {stats.map(({ icon: Icon, label, value, color }) => (
-                <div key={label} className="bg-white/15 backdrop-blur-sm border border-white/20 rounded-2xl px-5 py-4 text-white text-center min-w-[120px]">
-                  <Icon className={cn("w-5 h-5 mx-auto mb-1.5", color)} />
-                  <p className="text-2xl font-black">{value}</p>
-                  <p className="text-[11px] text-white/60 font-semibold uppercase tracking-wider mt-0.5">{label}</p>
-                </div>
-              ))}
+            {/* Right */}
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:justify-end">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
+                <input type="text" placeholder="Search name or specialty…"
+                  value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-300 shadow-md"/>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {stats.map(({icon:Icon,label,value,color})=>(
+                  <div key={label} className="flex items-center gap-1.5 bg-black/20 backdrop-blur-sm px-3 py-2 rounded-xl border border-white/10">
+                    <Icon className={cn("w-3.5 h-3.5",color)}/>
+                    <span className="font-black text-white text-xs">{value}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
-
-        <svg className="absolute bottom-0 left-0 w-full" viewBox="0 0 1440 32" preserveAspectRatio="none">
-          <path d="M0,32 C480,0 960,0 1440,32 L1440,32 L0,32 Z" fill="rgb(249,250,251)" />
-        </svg>
+        <svg className="absolute bottom-0 left-0 w-full" viewBox="0 0 1440 24" preserveAspectRatio="none"><path d="M0,24 C360,4 1080,4 1440,24 L1440,24 L0,24 Z" fill="rgb(249,250,251)"/></svg>
       </section>
 
       {/* ── Content ── */}

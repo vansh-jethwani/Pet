@@ -818,35 +818,6 @@ export default function Community() {
         />
       )}
 
-      {/* Hero */}
-      <section className="bg-gradient-to-br from-orange-50 via-white to-amber-50 border-b border-gray-100 py-12 sm:py-16">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-2xl">
-            <div className="flex items-center gap-3 mb-3">
-              <h1 className="text-4xl sm:text-5xl font-bold text-gray-900">Community</h1>
-              <span className={cn(
-                "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border",
-                isConnected
-                  ? "bg-green-50 text-green-600 border-green-200"
-                  : "bg-gray-100 text-gray-500 border-gray-200"
-              )}>
-                {isConnected
-                  ? <><Wifi className="w-3 h-3" /> Live</>
-                  : <><WifiOff className="w-3 h-3" /> Offline</>
-                }
-              </span>
-            </div>
-            <p className="text-lg text-gray-600 mb-8">
-              Connect with pet lovers. Posts, replies, likes and views update in real-time.
-            </p>
-            <div className="flex flex-wrap items-end gap-6 text-sm">
-              <div><span className="text-2xl font-bold text-orange-500">4,821</span><p className="text-gray-500">Members</p></div>
-              <div><span className="text-2xl font-bold text-orange-500">{posts.length}</span><p className="text-gray-500">Posts</p></div>
-              <div><span className="text-2xl font-bold text-orange-500">{totalReplies}</span><p className="text-gray-500">Replies</p></div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid lg:grid-cols-4 gap-8 items-start">
@@ -884,23 +855,6 @@ export default function Community() {
                     )}>{opt.icon}{opt.label}</button>
                 ))}
               </div>
-            </div>
-
-            <div className={cn(
-              "rounded-2xl p-4 border text-sm",
-              isConnected ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"
-            )}>
-              <div className="flex items-center gap-2 font-semibold mb-1">
-                {isConnected
-                  ? <><Wifi className="w-4 h-4 text-green-500" /><span className="text-green-700">Live updates on</span></>
-                  : <><WifiOff className="w-4 h-4 text-gray-400" /><span className="text-gray-600">Connecting…</span></>
-                }
-              </div>
-              <p className={cn("text-xs", isConnected ? "text-green-600" : "text-gray-500")}>
-                {isConnected
-                  ? "New posts, replies and likes appear instantly."
-                  : "Attempting to establish real-time connection."}
-              </p>
             </div>
           </aside>
 

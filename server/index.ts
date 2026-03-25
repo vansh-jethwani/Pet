@@ -16,6 +16,7 @@ import { initNotificationService } from "./models/Notification.js";
 import { connectDB }               from "./db.js";
 import { seedDatabase }            from "./seed.js";
 import hostingRouter from "./routes/hosting.js";
+import breedingMatchesRouter from "./routes/breedingMatches.js";
 
 let _io: Server | undefined;
 
@@ -55,6 +56,7 @@ export async function createApp() {
   app.use("/api/store",         storeRouter);
   app.use("/api/adoption",      adoptionRouter);
   app.use("/api/hosting",       hostingRouter);
+  app.use("/api/breeding-matches", breedingMatchesRouter);
 
   return app;
 }
