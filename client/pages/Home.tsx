@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Zap,
   PawPrint,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -146,12 +147,12 @@ export default function Home() {
               color="from-yellow-400 to-orange-400"
             />
 
-            {/* Marketplace */}
+            {/* Messages */}
             <FeatureCard
-              icon={<ShoppingCart className="w-8 h-8" />}
-              title="Marketplace"
-              description="Buy and sell pets from trusted sellers in your area."
-              href="/marketplace"
+              icon={<MessageSquare className="w-8 h-8" />}
+              title="Messages"
+              description="Send and receive messages with pet owners and hosts instantly."
+              href="/chat"
               color="from-blue-500 to-cyan-400"
             />
 

@@ -30,10 +30,11 @@ export default function Header() {
     { label: "Breeding Match", href: "/breeding"    },
     { label: "Adoption",       href: "/adoption"    },
     { label: "Host a Pet",     href: "/hosting"     },
-    { label: "Marketplace",    href: "/marketplace" },
+    // { label: "Marketplace",    href: "/marketplace" },
     { label: "Vets",           href: "/vets"        },
     { label: "Insurance",      href: "/insurance"   },
     { label: "Store",          href: "/store"       },
+    { label: "Community",      href: "/community"       },
   ];
 
   return (
