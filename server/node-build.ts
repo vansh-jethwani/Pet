@@ -12,10 +12,14 @@ async function start() {
   const distPath = path.join(__dirname, "../spa");
 
   app.use(express.static(distPath));
-  app.get("*", (req, res) => {
-    if (req.path.startsWith("/api/") || req.path.startsWith("/health")) {
-      return res.status(404).json({ error: "API endpoint not found" });
-    }
+
+  // Express 5 does not support bare "*" wildcards.
+  // Use a regex to catch all non-API routes and serve the SPA index.html.
+  app.get(/^\/api\//, (_req, res) => {
+    res.status(404).json({ error: "API endpoint not found" });
+  });
+
+  app.get(/.*/, (_req, res) => {
     res.sendFile(path.join(distPath, "index.html"));
   });
 
