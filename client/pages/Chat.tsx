@@ -67,12 +67,15 @@ type CallStatus =
   | "ended";
 
 interface CallInfo {
-  status:        CallStatus;
-  callType?:     "video" | "voice";
-  callerName?:   string;
-  callerAvatar?: string;
-  callerId?:     string;
-  remoteSocket?: string;
+  status:          CallStatus;
+  callType?:       "video" | "voice";
+  callerName?:     string;
+  callerAvatar?:   string;
+  callerId?:       string;
+  remoteSocket?:   string;
+  // Outgoing calls: who we are calling
+  receiverName?:   string;
+  receiverAvatar?: string;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -82,6 +85,23 @@ const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    // TURN relay — required for calls across different networks / strict NATs
+    // Free open relay (dev/testing). Replace with a paid TURN for production.
+    {
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turns:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
   ],
 };
 
@@ -239,23 +259,37 @@ function CallOverlay({ localStream, remoteStream, info, isMuted, isCameraOff, el
   useEffect(() => { if (localRef.current  && localStream)  localRef.current.srcObject  = localStream;  }, [localStream]);
   useEffect(() => { if (remoteRef.current && remoteStream) remoteRef.current.srcObject = remoteStream; }, [remoteStream]);
 
-  const isVoice = info.callType === "voice" || info.status === "voice_connected" || info.status === "voice_calling";
-  const isConn  = info.status === "connected" || info.status === "voice_connected";
+  const isVoice  = info.callType === "voice" || info.status === "voice_connected" || info.status === "voice_calling";
+  const isConn   = info.status === "connected" || info.status === "voice_connected";
+  const isCallee = info.status === "incoming" || (!!info.callerName && !info.receiverName);
+
+  // Show the OTHER person's info regardless of who initiated
+  const displayName   = isCallee ? (info.callerName   ?? "Unknown") : (info.receiverName  ?? "Connecting…");
+  const displayAvatar = isCallee ? (info.callerAvatar ?? "")        : (info.receiverAvatar ?? "");
+
+  const statusLabel = isConn
+    ? fmtDur(elapsed)
+    : (info.status === "calling" || info.status === "voice_calling")
+      ? "Ringing…"
+      : "Connecting…";
 
   return (
     <div className="fixed inset-0 z-[9999] call-bg flex flex-col overflow-hidden anim-popIn">
-      <div className="flex-1 relative flex items-center justify-center bg-slate-950">
+      {/* Video / Avatar area */}
+      <div className="flex-1 relative flex items-center justify-center bg-slate-950 min-h-0">
         {!isVoice && remoteStream
           ? <video ref={remoteRef} autoPlay playsInline className="w-full h-full object-cover" />
           : (
             <div className="flex flex-col items-center gap-5">
-              <Av src={info.callerAvatar} name={info.callerName} size={28} className="ring-4 ring-orange-500/40" />
+              <Av src={displayAvatar} name={displayName} size={28} className="ring-4 ring-orange-500/40" />
               <div className="text-center">
-                <p className="text-white text-xl font-bold">{info.callerName}</p>
-                <p className="text-orange-400 text-sm mt-1 anim-pulse">{isConn ? fmtDur(elapsed) : isVoice ? "Calling…" : "Ringing…"}</p>
+                <p className="text-white text-xl font-bold">{displayName}</p>
+                <p className="text-orange-400 text-sm mt-1 anim-pulse">{statusLabel}</p>
               </div>
             </div>
           )}
+
+        {/* Local PiP for video calls */}
         {!isVoice && (
           <div className="absolute top-4 right-4 w-28 h-36 rounded-xl overflow-hidden border-2 border-white/20 shadow-2xl bg-slate-800">
             {isCameraOff
@@ -264,6 +298,8 @@ function CallOverlay({ localStream, remoteStream, info, isMuted, isCameraOff, el
             }
           </div>
         )}
+
+        {/* Timer badge */}
         {isConn && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-full">
             <span className="text-white text-xs font-medium ch-mono flex items-center gap-1.5">
@@ -271,14 +307,26 @@ function CallOverlay({ localStream, remoteStream, info, isMuted, isCameraOff, el
             </span>
           </div>
         )}
+
+        {/* Call type badge top-left */}
+        <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full">
+          {isVoice
+            ? <Phone className="w-3.5 h-3.5 text-green-400" />
+            : <Video className="w-3.5 h-3.5 text-blue-400" />}
+          <span className="text-white text-xs font-semibold">{isVoice ? "Voice Call" : "Video Call"}</span>
+        </div>
       </div>
+
+      {/* ── Controls bar — fixed at bottom, never clipped ── */}
       <div className="flex-shrink-0 bg-slate-900 border-t border-white/10 px-6 pt-5 pb-8">
         <div className="flex items-end justify-center gap-8 flex-wrap">
           {/* Mute / Unmute */}
           <div className="flex flex-col items-center gap-2">
             <button onClick={onMute}
-              className={cn("w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg",
-                isMuted ? "bg-red-500 text-white ring-2 ring-red-400/40" : "bg-white/15 text-white hover:bg-white/25")}>
+              className={cn(
+                "w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg",
+                isMuted ? "bg-red-500 text-white ring-2 ring-red-400/40" : "bg-white/15 text-white hover:bg-white/25"
+              )}>
               {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             </button>
             <span className="text-[11px] text-white/60 font-semibold select-none">{isMuted ? "Unmute" : "Mute"}</span>
@@ -371,9 +419,9 @@ export default function ChatPage() {
   const totalUnread = useMemo(() => rooms.reduce((s, r) => s + r.unread, 0), [rooms]);
 
   useEffect(() => {
-    if (callInfo.status !== "connected" && callInfo.status !== "voice_connected") {
-      setCallElapsed(0); return;
-    }
+    // Only run timer when actively connected; reset elapsed when not connected
+    const isConnected = callInfo.status === "connected" || callInfo.status === "voice_connected";
+    if (!isConnected) { setCallElapsed(0); return; }
     const t = setInterval(() => setCallElapsed(e => e + 1), 1000);
     return () => clearInterval(t);
   }, [callInfo.status]);
@@ -594,33 +642,75 @@ export default function ChatPage() {
       await createAndSendOffer(data.socketId);
     });
 
-    socket.on("call_rejected", () => { stopRingtone(); setCallInfo({ status: "ended" }); setTimeout(() => setCallInfo({ status: "idle" }), 2500); cleanupCall(); });
-    socket.on("call_ended",    () => { stopRingtone(); setCallInfo({ status: "ended" }); setTimeout(() => setCallInfo({ status: "idle" }), 2000); cleanupCall(); });
+    socket.on("call_rejected", () => {
+      stopRingtone();
+      // Caller: missed call system message
+      setCallInfo(prev => {
+        if (prev.status === "calling" || prev.status === "voice_calling") {
+          sendCallSystemMsg(prev.callType === "voice" ? "📵 Missed voice call" : "📵 Missed video call");
+        }
+        return { status: "ended" };
+      });
+      setTimeout(() => setCallInfo({ status: "idle" }), 2500);
+      cleanupCall();
+    });
+
+    socket.on("call_ended", () => {
+      stopRingtone();
+      // If we were connected, log call duration; otherwise it was ended before answer
+      setCallInfo(prev => {
+        const wasConnected = prev.status === "connected" || prev.status === "voice_connected";
+        if (wasConnected) {
+          // callElapsed is in state but we need current value — read from DOM/ref not possible here,
+          // so we log without duration from the receiver side (caller side logs duration in endCall)
+          sendCallSystemMsg(prev.callType === "voice" ? "📞 Voice call" : "📹 Video call");
+        } else if (prev.status === "incoming") {
+          sendCallSystemMsg(prev.callType === "voice" ? "📵 Missed voice call" : "📵 Missed video call");
+        }
+        return { status: "ended" };
+      });
+      setTimeout(() => setCallInfo({ status: "idle" }), 2000);
+      cleanupCall();
+    });
 
     socket.on("webrtc_offer", async (data: { offer: RTCSessionDescriptionInit; fromSocketId: string }) => {
-      remoteSocketRef.current = data.fromSocketId;
-      const pc = getPC();
-      if (localStreamRef.current) addTracksToPC(pc, localStreamRef.current);
-      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-      for (const c of icePendingRef.current) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.error);
-      icePendingRef.current = [];
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit("webrtc_answer", { roomId: activeRoomIdRef.current, answer, targetSocketId: data.fromSocketId });
+      try {
+        remoteSocketRef.current = data.fromSocketId;
+        const pc = getPC();
+        if (localStreamRef.current) addTracksToPC(pc, localStreamRef.current);
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        for (const c of icePendingRef.current) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.error);
+        icePendingRef.current = [];
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit("webrtc_answer", { roomId: activeRoomIdRef.current, answer, targetSocketId: data.fromSocketId });
+      } catch (err) {
+        console.error("[WebRTC] offer handling failed:", err);
+        cleanupCall(); setCallInfo({ status: "ended" });
+        setTimeout(() => setCallInfo({ status: "idle" }), 2000);
+      }
     });
 
     socket.on("webrtc_answer", async (data: { answer: RTCSessionDescriptionInit }) => {
-      const pc = pcRef.current;
-      if (!pc || pc.signalingState !== "have-local-offer") return;
-      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-      for (const c of icePendingRef.current) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.error);
-      icePendingRef.current = [];
+      try {
+        const pc = pcRef.current;
+        if (!pc || pc.signalingState !== "have-local-offer") return;
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        for (const c of icePendingRef.current) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.error);
+        icePendingRef.current = [];
+      } catch (err) {
+        console.error("[WebRTC] answer handling failed:", err);
+      }
     });
 
     socket.on("webrtc_ice_candidate", async (data: { candidate: RTCIceCandidateInit }) => {
-      const pc = pcRef.current;
-      if (!pc || !pc.remoteDescription) { icePendingRef.current.push(data.candidate); return; }
-      await pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(console.error);
+      try {
+        const pc = pcRef.current;
+        if (!pc || !pc.remoteDescription) { icePendingRef.current.push(data.candidate); return; }
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(console.error);
+      } catch (err) {
+        console.error("[WebRTC] ICE candidate error:", err);
+      }
     });
 
     return () => { socket.disconnect(); cleanupCall(); };
@@ -746,37 +836,97 @@ export default function ChatPage() {
     }
   }
 
+  /** Send a WhatsApp-style system message into the active chat room */
+  const sendCallSystemMsg = useCallback((text: string) => {
+    const roomId = activeRoomIdRef.current;
+    const socket = socketRef.current;
+    if (!roomId || !socket) return;
+    const msg: ChatMessage = {
+      id:           `sys_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      roomId,
+      senderId:     "system",
+      senderName:   "system",
+      senderAvatar: "",
+      text,
+      timestamp:    new Date().toISOString(),
+      type:         "system",
+    };
+    // Show locally immediately
+    setMessages(prev => [...prev, msg]);
+    // Broadcast to the other party via existing send_message path
+    socket.emit("send_message", {
+      roomId,
+      senderId:     "system",
+      senderName:   "system",
+      senderAvatar: "",
+      text,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const callTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const startCall = useCallback(async (type: "video" | "voice") => {
     if (!activeRoomIdRef.current) return;
     setCallError(null);
+    const room = rooms.find(r => r.id === activeRoomIdRef.current);
+    const myId = myIdRef.current;
+    const receiverName   = room ? (room.ownerId === myId ? room.seekerName  : room.ownerName)   : "";
+    const receiverAvatar = room ? (room.ownerId === myId ? room.seekerAvatar : undefined) : undefined;
     try {
       cleanupCall();
       const stream = await acquireMedia(type === "video");
       localStreamRef.current = stream; setLocalStream(stream);
       const pc = getPC(); addTracksToPC(pc, stream);
-      setCallInfo({ status: type === "voice" ? "voice_calling" : "calling", callType: type });
+      setCallInfo({
+        status: type === "voice" ? "voice_calling" : "calling",
+        callType: type,
+        receiverName,
+        receiverAvatar,
+      });
       startRingtone();
       socketRef.current?.emit("call_initiate", {
         roomId: activeRoomIdRef.current,
         callerId: myIdRef.current, callerName: myNameRef.current,
         callerAvatar: myAvatarRef.current, callType: type,
       });
+      // Auto-end call after 45s if callee never answers
+      if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = setTimeout(() => {
+        setCallInfo(prev => {
+          if (prev.status === "calling" || prev.status === "voice_calling") {
+            socketRef.current?.emit("call_ended", { roomId: activeRoomIdRef.current, callerId: myIdRef.current });
+            stopRingtone();
+            cleanupCall();
+            sendCallSystemMsg(prev.callType === "voice" ? "📵 Missed voice call" : "📵 Missed video call");
+            return { status: "ended" };
+          }
+          return prev;
+        });
+        setTimeout(() => setCallInfo({ status: "idle" }), 2000);
+      }, 45000);
     } catch (err: any) {
       setCallError(err?.message ?? "Could not start call.");
       cleanupCall();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getPC, addTracksToPC, startRingtone, cleanupCall]);
+  }, [rooms, getPC, addTracksToPC, startRingtone, stopRingtone, cleanupCall, sendCallSystemMsg]);
+
+  // Use a ref for callerId so acceptCall never captures a stale closure value
+  const callerIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => { callerIdRef.current = callInfo.callerId; }, [callInfo.callerId]);
 
   const acceptCall = useCallback(async (type: "video" | "voice") => {
     stopRingtone();
+    if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
     try {
       const stream = await acquireMedia(type === "video");
       localStreamRef.current = stream; setLocalStream(stream);
       const pc = getPC(); addTracksToPC(pc, stream);
       setCallInfo(prev => ({ ...prev, status: type === "voice" ? "voice_connected" : "connected", callType: type }));
       socketRef.current?.emit("call_accepted", {
-        roomId: activeRoomIdRef.current, callerId: callInfo.callerId,
+        roomId: activeRoomIdRef.current,
+        callerId: callerIdRef.current,  // ref — always up-to-date, never stale
         answererName: myNameRef.current, callType: type,
       });
     } catch (err: any) {
@@ -785,35 +935,58 @@ export default function ChatPage() {
       setCallInfo({ status: "idle" });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callInfo.callerId, getPC, addTracksToPC, stopRingtone]);
+  }, [getPC, addTracksToPC, stopRingtone]);
 
   const rejectCall = useCallback(() => {
     stopRingtone();
+    sendCallSystemMsg(
+      callInfo.callType === "voice" ? "📵 Missed voice call" : "📵 Missed video call"
+    );
     socketRef.current?.emit("call_rejected", {
       roomId: activeRoomIdRef.current,
-      // BUG-H FIX: include our userId so server can route without socketUserMap
       callerId: myIdRef.current,
     });
     setCallInfo({ status: "idle" });
-  }, [stopRingtone]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callInfo.callType, stopRingtone, sendCallSystemMsg]);
 
   const endCall = useCallback(() => {
     stopRingtone();
+    // Log call with duration on the caller/ender side
+    const elapsed = callElapsed;
+    setCallInfo(prev => {
+      const wasConnected = prev.status === "connected" || prev.status === "voice_connected";
+      const label = prev.callType === "voice" ? "📞 Voice call" : "📹 Video call";
+      if (wasConnected && elapsed > 0) {
+        sendCallSystemMsg(`${label} • ${fmtDur(elapsed)}`);
+      } else if (wasConnected) {
+        sendCallSystemMsg(label);
+      }
+      return prev;
+    });
     socketRef.current?.emit("call_ended", {
       roomId: activeRoomIdRef.current,
-      // BUG-H FIX: include our userId so server can route without socketUserMap
       callerId: myIdRef.current,
     });
+    if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
     cleanupCall(); setCallInfo({ status: "idle" });
-  }, [cleanupCall, stopRingtone]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callElapsed, cleanupCall, stopRingtone, sendCallSystemMsg]);
 
   const toggleMute = useCallback(() => {
-    const t = localStreamRef.current?.getAudioTracks()[0];
-    if (t) { t.enabled = !t.enabled; setIsMuted(!t.enabled); }
+    const tracks = localStreamRef.current?.getAudioTracks() ?? [];
+    if (tracks.length === 0) return; // no audio track (shouldn't happen but safe)
+    const t = tracks[0];
+    t.enabled = !t.enabled;
+    setIsMuted(!t.enabled);
   }, []);
+
   const toggleCamera = useCallback(() => {
-    const t = localStreamRef.current?.getVideoTracks()[0];
-    if (t) { t.enabled = !t.enabled; setIsCameraOff(!t.enabled); }
+    const tracks = localStreamRef.current?.getVideoTracks() ?? [];
+    if (tracks.length === 0) return; // voice-only call — no video track, do nothing
+    const t = tracks[0];
+    t.enabled = !t.enabled;
+    setIsCameraOff(!t.enabled);
   }, []);
 
   /* ── Derived ── */

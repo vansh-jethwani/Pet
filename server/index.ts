@@ -10,6 +10,7 @@ import vetsRouter                  from "./routes/vets.js";
 import notificationsRouter         from "./routes/notifications.js";
 import sellersRouter               from "./routes/sellers.js";
 import storeRouter                 from "./routes/store.js";
+import adoptionRouter              from "./routes/adoption.js";
 import { registerChatHandlers }    from "./routes/chat.js";
 import { initNotificationService } from "./models/Notification.js";
 import { connectDB }               from "./db.js";
@@ -52,8 +53,8 @@ export async function createApp() {
   app.use("/api/notifications", notificationsRouter);
   app.use("/api/sellers",       sellersRouter);
   app.use("/api/store",         storeRouter);
-
-  app.use("/api/hosting", hostingRouter);
+  app.use("/api/adoption",      adoptionRouter);
+  app.use("/api/hosting",       hostingRouter);
 
   return app;
 }
