@@ -17,6 +17,9 @@ import { connectDB }               from "./db.js";
 import { seedDatabase }            from "./seed.js";
 import hostingRouter from "./routes/hosting.js";
 import breedingMatchesRouter from "./routes/breedingMatches.js";
+import insuranceRouter from "./routes/insurance.js";
+
+
 
 let _io: Server | undefined;
 
@@ -57,6 +60,7 @@ export async function createApp() {
   app.use("/api/adoption",      adoptionRouter);
   app.use("/api/hosting",       hostingRouter);
   app.use("/api/breeding-matches", breedingMatchesRouter);
+  app.use("/api/insurance", insuranceRouter);
 
   return app;
 }

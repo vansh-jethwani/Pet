@@ -133,7 +133,7 @@ function BookingModal({
       const res = await fetch(`${API}/${vet.id}/book`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ ...form, consultationType }),
+        body:    JSON.stringify({ ...form, consultationType, ownerUserId: user?.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Booking failed");

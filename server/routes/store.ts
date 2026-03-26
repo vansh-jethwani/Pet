@@ -1,6 +1,7 @@
 import { Router, RequestHandler } from "express";
 import { Product } from "../models/Product.js";
 import { Order } from "../models/Order.js";
+import { notifyStoreOrder, notifyShopOwnerOrder } from "../models/Notification.js";
 
 const router = Router();
 
@@ -210,7 +211,50 @@ router.post("/orders", (async (req, res) => {
       phone:   phone   || "",
     });
 
-    console.log(`[store] Order placed: ${order._id} by ${buyerName} — ₹${totalAmount}`);
+    const orderId = (order as any)._id.toString();
+
+    // ── Notify buyer ──────────────────────────────────────────────────────────
+    if (buyerId) {
+      const firstItemName = items[0]?.name ?? "item";
+      const itemLabel = items.length === 1
+        ? firstItemName
+        : `${firstItemName} + ${items.length - 1} more`;
+      notifyStoreOrder(buyerId, orderId, itemLabel, totalAmount).catch(console.error);
+    }
+
+    // ── Notify each unique seller ─────────────────────────────────────────────
+    // Group items by sellerId, then send one notification per seller.
+    // sellerId on Product is the seller's Clerk user ID, so we can target their room.
+    try {
+      const sellerMap = new Map<string, { productId: string; name: string; qty: number }[]>();
+      for (const item of items) {
+        const product = await Product.findById(item.productId).lean();
+        if (!product?.sellerId) continue;
+        const existing = sellerMap.get(product.sellerId) ?? [];
+        existing.push({ productId: item.productId, name: item.name, qty: item.quantity });
+        sellerMap.set(product.sellerId, existing);
+      }
+      for (const [sellerId, sellerItems] of sellerMap.entries()) {
+        const itemSummary = sellerItems.map(i => `${i.name} ×${i.qty}`).join(", ");
+        // Calculate seller's portion of totalAmount
+        const sellerTotal = sellerItems.reduce((s, si) => {
+          const matched = items.find(i => i.productId === si.productId);
+          return s + (matched ? matched.price * matched.quantity : 0);
+        }, 0);
+        notifyShopOwnerOrder(
+          sellerId,
+          buyerName || "A customer",
+          itemSummary,
+          sellerTotal,
+          orderId
+        ).catch(console.error);
+      }
+    } catch (notifErr) {
+      // Notification errors must never fail the order response
+      console.error("[store] seller notification error:", notifErr);
+    }
+
+    console.log(`[store] Order placed: ${orderId} by ${buyerName} — ₹${totalAmount}`);
     res.status(201).json(formatOrder(order));
   } catch (err) {
     console.error("[store] POST /orders error:", err);

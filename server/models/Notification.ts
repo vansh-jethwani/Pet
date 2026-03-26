@@ -201,14 +201,53 @@ export const notifyVetBooking = (
   vetUserId: string,
   ownerName: string,
   petName: string,
-  type: string
+  type: string,
+  preferredDate?: string
 ) =>
   createNotification({
     userId:      vetUserId,
     type:        "vet_booking",
-    message:     `${ownerName} booked a ${type} consultation for ${petName}`,
+    title:       "New Appointment Request",
+    message:     `${ownerName} wants to book a ${type} consultation for ${petName}${
+      preferredDate ? ` on ${new Date(preferredDate).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}` : ""
+    }. Please review and accept.`,
     actionUrl:   "/dashboard",
-    actionLabel: "View",
+    actionLabel: "Review",
+  });
+
+export const notifyVetBookingUser = (
+  userUserId: string,
+  vetName: string,
+  petName: string,
+  type: string,
+  preferredDate?: string
+) =>
+  createNotification({
+    userId:      userUserId,
+    type:        "vet_booking",
+    title:       "Booking Request Sent!",
+    message:     `Your ${type} consultation request for ${petName} with Dr. ${vetName} has been sent.${
+      preferredDate ? ` Requested: ${new Date(preferredDate).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}` : ""
+    }`,
+    actionUrl:   "/dashboard",
+    actionLabel: "View Dashboard",
+  });
+
+export const notifyShopOwnerOrder = (
+  sellerUserId: string,
+  buyerName: string,
+  itemSummary: string,
+  totalAmount: number,
+  orderId: string
+) =>
+  createNotification({
+    userId:      sellerUserId,
+    type:        "store_order",
+    title:       "New Order Received! 📦",
+    message:     `${buyerName} ordered ${itemSummary} — ₹${totalAmount.toLocaleString("en-IN")}`,
+    actionUrl:   "/store",
+    actionLabel: "View Orders",
+    metadata:    { orderId },
   });
 
 export const notifyVetApproved = (vetUserId: string, vetName: string) =>
@@ -358,9 +397,10 @@ export const notifyStoreOrder = (
   createNotification({
     userId,
     type:        "store_order",
-    message:     `Order ${orderId} confirmed: ${itemName} — $${amount}`,
+    title:       "Order Confirmed! 🎉",
+    message:     `Your order for ${itemName} — ₹${amount.toLocaleString("en-IN")} has been placed successfully!`,
     actionUrl:   "/store",
-    actionLabel: "Track",
+    actionLabel: "Track Order",
     metadata:    { orderId },
   });
 

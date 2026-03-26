@@ -1,6 +1,6 @@
 import { Router, RequestHandler } from "express";
 import { Vet } from "../models/Vet.js";
-import { notifyVetBooking } from "../models/Notification.js";
+import { notifyVetBooking, notifyVetBookingUser } from "../models/Notification.js";
 
 const router = Router();
 
@@ -223,7 +223,7 @@ router.post("/:id/book", (async (req, res) => {
     if (!vet) return res.status(404).json({ error: "Vet not found" });
     if (!vet.available) return res.status(400).json({ error: "This vet is currently unavailable" });
 
-    const { consultationType, petName, petType, ownerName, ownerEmail, preferredDate, notes } = req.body;
+    const { consultationType, petName, petType, ownerName, ownerEmail, ownerUserId, preferredDate, notes } = req.body;
 
     if (!consultationType)      return res.status(400).json({ error: "consultationType is required" });
     if (!ownerName?.trim())     return res.status(400).json({ error: "ownerName is required" });
@@ -253,13 +253,25 @@ router.post("/:id/book", (async (req, res) => {
       createdAt:        new Date().toISOString(),
     };
 
-    // FIX: notify the vet if they have a clerkId registered
+    // Notify the VET — includes preferred date in message
     if (vet.clerkId?.trim()) {
       notifyVetBooking(
         vet.clerkId,
         ownerName.trim(),
         petName || "Unknown",
-        consultationType
+        consultationType,
+        preferredDate || undefined
+      ).catch(console.error);
+    }
+
+    // Notify the USER who made the booking
+    if (ownerUserId?.trim()) {
+      notifyVetBookingUser(
+        ownerUserId.trim(),
+        vet.name,
+        petName || "Unknown",
+        consultationType,
+        preferredDate || undefined
       ).catch(console.error);
     }
 

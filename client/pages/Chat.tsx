@@ -254,10 +254,20 @@ function CallOverlay({ localStream, remoteStream, info, isMuted, isCameraOff, el
   info: CallInfo; isMuted: boolean; isCameraOff: boolean; elapsed: number;
   onMute: () => void; onCam: () => void; onEnd: () => void;
 }) {
-  const localRef  = useRef<HTMLVideoElement>(null);
-  const remoteRef = useRef<HTMLVideoElement>(null);
+  const localRef     = useRef<HTMLVideoElement>(null);
+  const remoteRef    = useRef<HTMLVideoElement>(null);
+  // Hidden audio element — plays the remote stream for voice-only calls where
+  // the <video> element is not rendered and would never receive srcObject.
+  const remoteAudio  = useRef<HTMLAudioElement>(null);
   useEffect(() => { if (localRef.current  && localStream)  localRef.current.srcObject  = localStream;  }, [localStream]);
   useEffect(() => { if (remoteRef.current && remoteStream) remoteRef.current.srcObject = remoteStream; }, [remoteStream]);
+  // For voice calls: pipe remoteStream into the hidden <audio> element so the
+  // user can actually hear the other party.
+  useEffect(() => {
+    if (remoteAudio.current && remoteStream) {
+      remoteAudio.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
 
   const isVoice  = info.callType === "voice" || info.status === "voice_connected" || info.status === "voice_calling";
   const isConn   = info.status === "connected" || info.status === "voice_connected";
@@ -275,6 +285,8 @@ function CallOverlay({ localStream, remoteStream, info, isMuted, isCameraOff, el
 
   return (
     <div className="fixed inset-0 z-[9999] call-bg flex flex-col overflow-hidden anim-popIn">
+      {/* Hidden audio for voice calls — always present so remote audio always plays */}
+      <audio ref={remoteAudio} autoPlay playsInline style={{ display: "none" }} />
       {/* Video / Avatar area */}
       <div className="flex-1 relative flex items-center justify-center bg-slate-950 min-h-0">
         {!isVoice && remoteStream
@@ -460,7 +472,10 @@ export default function ChatPage() {
     };
     pc.ontrack = e => setRemoteStream(e.streams[0]);
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+      // Only treat "failed" as fatal. "disconnected" is transient and often
+      // self-recovers (e.g. during ICE renegotiation). Ending on "disconnected"
+      // caused video calls to auto-terminate after a few seconds.
+      if (pc.connectionState === "failed") {
         cleanupCall(); setCallInfo({ status: "ended" });
         setTimeout(() => setCallInfo({ status: "idle" }), 2500);
       }
