@@ -3,7 +3,7 @@
  *
  * BUG-14: autoOpenDoneRef not reset when location.state changes.
  *   When the user is already on /chat and navigates to a different pet's chat
- *   (e.g. from Breeding matches), autoOpenDoneRef.current was still true from
+ *   (e.g. from Pet Companiones), autoOpenDoneRef.current was still true from
  *   the previous open, so the new autoOpen state was silently ignored.
  *   FIX: Added a dedicated useEffect([location.state]) that resets the ref
  *   whenever the navigation state changes.
@@ -1078,7 +1078,7 @@ export default function ChatPage() {
                     <div>
                       <p className="font-bold text-gray-800">{searchQ ? "No results" : "No conversations yet"}</p>
                       <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-                        {searchQ ? "Try a different search term." : "Like a pet on Breeding Match to start a conversation."}
+                        {searchQ ? "Try a different search term." : "Like a pet on Pet Companion to start a conversation."}
                       </p>
                     </div>
                     {!searchQ && (
@@ -1156,7 +1156,7 @@ export default function ChatPage() {
                   </div>
                   <div>
                     <h3 className="text-2xl font-black text-gray-900 mb-2">Select a Conversation</h3>
-                    <p className="text-gray-500 text-sm max-w-xs">Choose from the sidebar, or like a pet on Breeding Match to start chatting.</p>
+                    <p className="text-gray-500 text-sm max-w-xs">Choose from the sidebar, or like a pet on Pet Companion to start chatting.</p>
                   </div>
                   <Link to="/breeding" className="px-6 py-3 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 transition-colors shadow-md">Browse Pets</Link>
                 </div>

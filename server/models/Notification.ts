@@ -18,44 +18,44 @@ import type { Server as SocketServer } from "socket.io";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type NotificationType =
-  | "breeding_like"        | "breeding_match"        | "breeding_message"
-  | "adoption_applied"     | "adoption_approved"
-  | "hosting_request"      | "hosting_confirmed"
-  | "vet_booking"          | "vet_reminder"          | "vet_approved"
+  | "breeding_like" | "breeding_match" | "breeding_message"
+  | "adoption_applied" | "adoption_approved"
+  | "hosting_request" | "hosting_confirmed"
+  | "vet_booking" | "vet_reminder" | "vet_approved"
   | "marketplace_interest" | "store_order"
-  | "community_reply"      | "community_like"
+  | "community_reply" | "community_like"
   | "community_reply_to_reply"                       // someone replied to YOUR reply
   | "community_reply_like"                           // someone liked YOUR reply
-  | "insurance_expiry"     | "system";
+  | "insurance_expiry" | "system";
 
 export interface INotification extends Document {
-  userId:      string;
-  type:        NotificationType;
-  title:       string;
-  message:     string;
-  icon:        string;
-  color:       string;
-  read:        boolean;
-  actionUrl:   string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  icon: string;
+  color: string;
+  read: boolean;
+  actionUrl: string;
   actionLabel: string;
-  metadata:    Record<string, any>;
-  createdAt:   Date;
+  metadata: Record<string, any>;
+  createdAt: Date;
 }
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
 const NotificationSchema = new Schema<INotification>(
   {
-    userId:      { type: String,  required: true },
-    type:        { type: String,  required: true },
-    title:       { type: String,  required: true },
-    message:     { type: String,  required: true },
-    icon:        { type: String,  default: "🔔"  },
-    color:       { type: String,  default: "orange" },
-    read:        { type: Boolean, default: false },
-    actionUrl:   { type: String,  default: ""    },
-    actionLabel: { type: String,  default: ""    },
-    metadata:    { type: Schema.Types.Mixed, default: {} },
+    userId: { type: String, required: true },
+    type: { type: String, required: true },
+    title: { type: String, required: true },
+    message: { type: String, required: true },
+    icon: { type: String, default: "🔔" },
+    color: { type: String, default: "orange" },
+    read: { type: Boolean, default: false },
+    actionUrl: { type: String, default: "" },
+    actionLabel: { type: String, default: "" },
+    metadata: { type: Schema.Types.Mixed, default: {} },
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );
@@ -71,19 +71,19 @@ export const Notification =
 
 export function formatNotification(doc: any) {
   return {
-    id:          doc._id?.toString() ?? doc.id ?? "",
-    userId:      doc.userId      ?? "",
-    type:        doc.type        ?? "system",
-    title:       doc.title       ?? "Notification",
-    message:     doc.message     ?? "",
-    icon:        doc.icon        ?? "🔔",
-    color:       doc.color       ?? "orange",
-    read:        Boolean(doc.read),
-    actionUrl:   doc.actionUrl   ?? "",
+    id: doc._id?.toString() ?? doc.id ?? "",
+    userId: doc.userId ?? "",
+    type: doc.type ?? "system",
+    title: doc.title ?? "Notification",
+    message: doc.message ?? "",
+    icon: doc.icon ?? "🔔",
+    color: doc.color ?? "orange",
+    read: Boolean(doc.read),
+    actionUrl: doc.actionUrl ?? "",
     actionLabel: doc.actionLabel ?? "",
-    metadata:    doc.metadata    ?? {},
+    metadata: doc.metadata ?? {},
     // BUG FIX: handle both Date objects and ISO strings
-    createdAt:   doc.createdAt instanceof Date
+    createdAt: doc.createdAt instanceof Date
       ? doc.createdAt.toISOString()
       : doc.createdAt ?? new Date().toISOString(),
   };
@@ -95,24 +95,24 @@ export const NOTIFICATION_DEFAULTS: Record<
   NotificationType,
   { icon: string; color: string; title: string }
 > = {
-  breeding_like:        { icon: "❤️",  color: "orange", title: "New Like on Breeding Match"   },
-  breeding_match:       { icon: "🎉",  color: "orange", title: "It's a Match!"                },
-  breeding_message:     { icon: "💬",  color: "blue",   title: "New Message"                  },
-  adoption_applied:     { icon: "🐾",  color: "purple", title: "Adoption Application"         },
-  adoption_approved:    { icon: "✅",  color: "green",  title: "Adoption Approved!"           },
-  hosting_request:      { icon: "🏡",  color: "yellow", title: "Hosting Request"              },
-  hosting_confirmed:    { icon: "✅",  color: "green",  title: "Hosting Confirmed"            },
-  vet_booking:          { icon: "🩺",  color: "red",    title: "New Consultation Booked"      },
-  vet_reminder:         { icon: "⏰",  color: "red",    title: "Upcoming Consultation"        },
-  vet_approved:         { icon: "🎖️", color: "green",  title: "Vet Profile Approved"         },
-  marketplace_interest: { icon: "🛍️", color: "blue",   title: "Marketplace Interest"         },
-  store_order:          { icon: "📦",  color: "green",  title: "New Order"                    },
-  community_reply:      { icon: "💬",  color: "orange", title: "New Reply on Your Post"       },
-  community_like:           { icon: "❤️",  color: "orange", title: "Someone Liked Your Post"      }, // overridden dynamically below
-  community_reply_to_reply: { icon: "↩️",  color: "orange", title: "Someone Replied to Your Reply" }, // overridden dynamically
-  community_reply_like:     { icon: "❤️",  color: "orange", title: "Someone Liked Your Reply"      }, // overridden dynamically
-  insurance_expiry:         { icon: "⚠️",  color: "red",    title: "Insurance Expiring Soon"       },
-  system:                   { icon: "🔔",  color: "gray",   title: "Notification"                  },
+  breeding_like: { icon: "❤️", color: "orange", title: "New Like on Pet Companion" },
+  breeding_match: { icon: "🎉", color: "orange", title: "It's a Match!" },
+  breeding_message: { icon: "💬", color: "blue", title: "New Message" },
+  adoption_applied: { icon: "🐾", color: "purple", title: "Adoption Application" },
+  adoption_approved: { icon: "✅", color: "green", title: "Adoption Approved!" },
+  hosting_request: { icon: "🏡", color: "yellow", title: "Hosting Request" },
+  hosting_confirmed: { icon: "✅", color: "green", title: "Hosting Confirmed" },
+  vet_booking: { icon: "🩺", color: "red", title: "New Consultation Booked" },
+  vet_reminder: { icon: "⏰", color: "red", title: "Upcoming Consultation" },
+  vet_approved: { icon: "🎖️", color: "green", title: "Vet Profile Approved" },
+  marketplace_interest: { icon: "🛍️", color: "blue", title: "Marketplace Interest" },
+  store_order: { icon: "📦", color: "green", title: "New Order" },
+  community_reply: { icon: "💬", color: "orange", title: "New Reply on Your Post" },
+  community_like: { icon: "❤️", color: "orange", title: "Someone Liked Your Post" }, // overridden dynamically below
+  community_reply_to_reply: { icon: "↩️", color: "orange", title: "Someone Replied to Your Reply" }, // overridden dynamically
+  community_reply_like: { icon: "❤️", color: "orange", title: "Someone Liked Your Reply" }, // overridden dynamically
+  insurance_expiry: { icon: "⚠️", color: "red", title: "Insurance Expiring Soon" },
+  system: { icon: "🔔", color: "gray", title: "Notification" },
 };
 
 // ─── Socket.io reference ──────────────────────────────────────────────────────
@@ -136,15 +136,15 @@ export function getNotificationIO(): SocketServer | null {
 // ─── Core create function ─────────────────────────────────────────────────────
 
 export interface CreateNotificationOptions {
-  userId:       string;
-  type:         NotificationType;
-  message:      string;
-  title?:       string;
-  icon?:        string;
-  color?:       string;
-  actionUrl?:   string;
+  userId: string;
+  type: NotificationType;
+  message: string;
+  title?: string;
+  icon?: string;
+  color?: string;
+  actionUrl?: string;
   actionLabel?: string;
-  metadata?:    Record<string, any>;
+  metadata?: Record<string, any>;
 }
 
 export async function createNotification(
@@ -160,16 +160,16 @@ export async function createNotification(
 
   try {
     const doc = await Notification.create({
-      userId:      opts.userId.trim(),
-      type:        opts.type,
-      title:       opts.title       ?? defaults.title,
-      message:     opts.message,
-      icon:        opts.icon        ?? defaults.icon,
-      color:       opts.color       ?? defaults.color,
-      read:        false,
-      actionUrl:   opts.actionUrl   ?? "",
+      userId: opts.userId.trim(),
+      type: opts.type,
+      title: opts.title ?? defaults.title,
+      message: opts.message,
+      icon: opts.icon ?? defaults.icon,
+      color: opts.color ?? defaults.color,
+      read: false,
+      actionUrl: opts.actionUrl ?? "",
       actionLabel: opts.actionLabel ?? "",
-      metadata:    opts.metadata    ?? {},
+      metadata: opts.metadata ?? {},
     });
 
     const formatted = formatNotification(doc);
@@ -205,13 +205,12 @@ export const notifyVetBooking = (
   preferredDate?: string
 ) =>
   createNotification({
-    userId:      vetUserId,
-    type:        "vet_booking",
-    title:       "New Appointment Request",
-    message:     `${ownerName} wants to book a ${type} consultation for ${petName}${
-      preferredDate ? ` on ${new Date(preferredDate).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}` : ""
-    }. Please review and accept.`,
-    actionUrl:   "/dashboard",
+    userId: vetUserId,
+    type: "vet_booking",
+    title: "New Appointment Request",
+    message: `${ownerName} wants to book a ${type} consultation for ${petName}${preferredDate ? ` on ${new Date(preferredDate).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}` : ""
+      }. Please review and accept.`,
+    actionUrl: "/dashboard",
     actionLabel: "Review",
   });
 
@@ -223,13 +222,12 @@ export const notifyVetBookingUser = (
   preferredDate?: string
 ) =>
   createNotification({
-    userId:      userUserId,
-    type:        "vet_booking",
-    title:       "Booking Request Sent!",
-    message:     `Your ${type} consultation request for ${petName} with Dr. ${vetName} has been sent.${
-      preferredDate ? ` Requested: ${new Date(preferredDate).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}` : ""
-    }`,
-    actionUrl:   "/dashboard",
+    userId: userUserId,
+    type: "vet_booking",
+    title: "Booking Request Sent!",
+    message: `Your ${type} consultation request for ${petName} with Dr. ${vetName} has been sent.${preferredDate ? ` Requested: ${new Date(preferredDate).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}` : ""
+      }`,
+    actionUrl: "/dashboard",
     actionLabel: "View Dashboard",
   });
 
@@ -241,21 +239,21 @@ export const notifyShopOwnerOrder = (
   orderId: string
 ) =>
   createNotification({
-    userId:      sellerUserId,
-    type:        "store_order",
-    title:       "New Order Received! 📦",
-    message:     `${buyerName} ordered ${itemSummary} — ₹${totalAmount.toLocaleString("en-IN")}`,
-    actionUrl:   "/store",
+    userId: sellerUserId,
+    type: "store_order",
+    title: "New Order Received! 📦",
+    message: `${buyerName} ordered ${itemSummary} — ₹${totalAmount.toLocaleString("en-IN")}`,
+    actionUrl: "/store",
     actionLabel: "View Orders",
-    metadata:    { orderId },
+    metadata: { orderId },
   });
 
 export const notifyVetApproved = (vetUserId: string, vetName: string) =>
   createNotification({
-    userId:      vetUserId,
-    type:        "vet_approved",
-    message:     `Congratulations ${vetName}! Your vet profile is now live.`,
-    actionUrl:   "/vets",
+    userId: vetUserId,
+    type: "vet_approved",
+    message: `Congratulations ${vetName}! Your vet profile is now live.`,
+    actionUrl: "/vets",
     actionLabel: "View profile",
   });
 
@@ -266,12 +264,12 @@ export const notifyBreedingLike = (
   petId = ""
 ) =>
   createNotification({
-    userId:      ownerUserId,
-    type:        "breeding_like",
-    message:     `${likerName} liked your pet ${petName}!`,
-    actionUrl:   "/breeding",
+    userId: ownerUserId,
+    type: "breeding_like",
+    message: `${likerName} liked your pet ${petName}!`,
+    actionUrl: "/breeding",
     actionLabel: "See matches",
-    metadata:    { petId },
+    metadata: { petId },
   });
 
 export const notifyBreedingMatch = (
@@ -281,9 +279,9 @@ export const notifyBreedingMatch = (
 ) =>
   createNotification({
     userId,
-    type:        "breeding_match",
-    message:     `You matched with ${matchedOwnerName}'s ${matchedPetName}! Start chatting.`,
-    actionUrl:   "/chat",
+    type: "breeding_match",
+    message: `You matched with ${matchedOwnerName}'s ${matchedPetName}! Start chatting.`,
+    actionUrl: "/chat",
     actionLabel: "Chat",
   });
 
@@ -294,12 +292,12 @@ export const notifyBreedingMessage = (
   roomId = ""
 ) =>
   createNotification({
-    userId:      ownerUserId,
-    type:        "breeding_message",
-    message:     `${senderName} sent a message about ${petName}`,
-    actionUrl:   "/chat",
+    userId: ownerUserId,
+    type: "breeding_message",
+    message: `${senderName} sent a message about ${petName}`,
+    actionUrl: "/chat",
     actionLabel: "Reply",
-    metadata:    { roomId },
+    metadata: { roomId },
   });
 
 export const notifyAdoptionApplied = (
@@ -308,10 +306,10 @@ export const notifyAdoptionApplied = (
   petName: string
 ) =>
   createNotification({
-    userId:      ownerUserId,
-    type:        "adoption_applied",
-    message:     `${applicantName} applied to adopt ${petName}!`,
-    actionUrl:   "/adoption",
+    userId: ownerUserId,
+    type: "adoption_applied",
+    message: `${applicantName} applied to adopt ${petName}!`,
+    actionUrl: "/adoption",
     actionLabel: "Review",
   });
 
@@ -321,10 +319,10 @@ export const notifyAdoptionApproved = (
   shelterName: string
 ) =>
   createNotification({
-    userId:      applicantUserId,
-    type:        "adoption_approved",
-    message:     `${shelterName} approved your application for ${petName}!`,
-    actionUrl:   "/adoption",
+    userId: applicantUserId,
+    type: "adoption_approved",
+    message: `${shelterName} approved your application for ${petName}!`,
+    actionUrl: "/adoption",
     actionLabel: "View",
   });
 
@@ -335,10 +333,10 @@ export const notifyHostingRequest = (
   dates = ""
 ) =>
   createNotification({
-    userId:      hostUserId,
-    type:        "hosting_request",
-    message:     `${requesterName} wants you to host ${petName}${dates ? ` (${dates})` : ""}`,
-    actionUrl:   "/hosting",
+    userId: hostUserId,
+    type: "hosting_request",
+    message: `${requesterName} wants you to host ${petName}${dates ? ` (${dates})` : ""}`,
+    actionUrl: "/hosting",
     actionLabel: "View",
   });
 
@@ -349,12 +347,12 @@ export const notifyCommunityReply = (
   postId = ""
 ) =>
   createNotification({
-    userId:      authorUserId,
-    type:        "community_reply",
-    message:     `${replierName} replied to your post: "${postTitle}"`,
-    actionUrl:   "/community",
+    userId: authorUserId,
+    type: "community_reply",
+    message: `${replierName} replied to your post: "${postTitle}"`,
+    actionUrl: "/community",
     actionLabel: "See reply",
-    metadata:    { postId },
+    metadata: { postId },
   });
 
 export const notifyCommunityLike = (
@@ -364,15 +362,15 @@ export const notifyCommunityLike = (
   postId = ""
 ) =>
   createNotification({
-    userId:      authorUserId,
-    type:        "community_like",
+    userId: authorUserId,
+    type: "community_like",
     // FIX: dynamic title using liker name so it shows "Vansh liked your post"
     // instead of the static default "Someone Liked Your Post"
-    title:       `${likerName} liked your post`,
-    message:     `${likerName} liked your post: "${postTitle}"`,
-    actionUrl:   "/community",
+    title: `${likerName} liked your post`,
+    message: `${likerName} liked your post: "${postTitle}"`,
+    actionUrl: "/community",
     actionLabel: "View",
-    metadata:    { postId },
+    metadata: { postId },
   });
 
 export const notifyMarketplaceInterest = (
@@ -381,10 +379,10 @@ export const notifyMarketplaceInterest = (
   listingName: string
 ) =>
   createNotification({
-    userId:      sellerUserId,
-    type:        "marketplace_interest",
-    message:     `${buyerName} is interested in: ${listingName}`,
-    actionUrl:   "/marketplace",
+    userId: sellerUserId,
+    type: "marketplace_interest",
+    message: `${buyerName} is interested in: ${listingName}`,
+    actionUrl: "/marketplace",
     actionLabel: "View",
   });
 
@@ -396,12 +394,12 @@ export const notifyStoreOrder = (
 ) =>
   createNotification({
     userId,
-    type:        "store_order",
-    title:       "Order Confirmed! 🎉",
-    message:     `Your order for ${itemName} — ₹${amount.toLocaleString("en-IN")} has been placed successfully!`,
-    actionUrl:   "/store",
+    type: "store_order",
+    title: "Order Confirmed! 🎉",
+    message: `Your order for ${itemName} — ₹${amount.toLocaleString("en-IN")} has been placed successfully!`,
+    actionUrl: "/store",
     actionLabel: "Track Order",
-    metadata:    { orderId },
+    metadata: { orderId },
   });
 
 export const notifyCommunityReplyToReply = (
@@ -411,13 +409,13 @@ export const notifyCommunityReplyToReply = (
   postId = ""
 ) =>
   createNotification({
-    userId:      replyAuthorUserId,
-    type:        "community_reply_to_reply",
-    title:       `${replierName} replied to your comment`,
-    message:     `${replierName} replied to your comment: "${snippet}"`,
-    actionUrl:   "/community",
+    userId: replyAuthorUserId,
+    type: "community_reply_to_reply",
+    title: `${replierName} replied to your comment`,
+    message: `${replierName} replied to your comment: "${snippet}"`,
+    actionUrl: "/community",
     actionLabel: "See reply",
-    metadata:    { postId },
+    metadata: { postId },
   });
 
 export const notifyCommunityReplyLike = (
@@ -427,11 +425,11 @@ export const notifyCommunityReplyLike = (
   postId = ""
 ) =>
   createNotification({
-    userId:      replyAuthorUserId,
-    type:        "community_reply_like",
-    title:       `${likerName} liked your comment`,
-    message:     `${likerName} liked your comment: "${snippet}"`,
-    actionUrl:   "/community",
+    userId: replyAuthorUserId,
+    type: "community_reply_like",
+    title: `${likerName} liked your comment`,
+    message: `${likerName} liked your comment: "${snippet}"`,
+    actionUrl: "/community",
     actionLabel: "View",
-    metadata:    { postId },
+    metadata: { postId },
   });

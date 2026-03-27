@@ -433,7 +433,7 @@ export default function OwnerInbox({
                     <p className="text-xs text-gray-400 mt-1 leading-relaxed">
                       {searchTerm
                         ? "Try a different search term."
-                        : "When someone likes your pet on Breeding Match, their message will appear here."}
+                        : "When someone likes your pet on Pet Companion, their message will appear here."}
                     </p>
                   </div>
                 </div>

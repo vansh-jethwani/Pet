@@ -487,7 +487,7 @@ export default function Breeding() {
                     <span className="w-1 h-1 rounded-full bg-amber-300/70"/>
                     <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Verified Profiles</span>
                   </div>
-                  <h1 className="bf-display text-3xl sm:text-4xl font-black text-white leading-none">Breeding Match 🐾</h1>
+                  <h1 className="bf-display text-3xl sm:text-4xl font-black text-white leading-none">Pet Companion 🐾</h1>
                   <p className="text-white/65 text-xs mt-1">Swipe · Like · Connect with trusted owners</p>
                 </div>
               </div>

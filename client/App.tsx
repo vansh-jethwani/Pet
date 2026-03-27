@@ -16,10 +16,6 @@ import SignUpChoice     from "./pages/SignUpChoice";
 import VetSignUp        from "./pages/VetSignUp";
 import PetSellerSignUp  from "./pages/PetSellerSignUp";
 import ShopOwnerSignUp  from "./pages/ShopOwnerSignUp";
-import DogsCategory     from "./pages/categories/DogsCategory";
-import CatsCategory     from "./pages/categories/CatsCategory";
-import FishCategory     from "./pages/categories/FishCategory";
-import BirdsCategory    from "./pages/categories/BirdsCategory";
 import NotFound         from "./pages/NotFound";
 
 function App() {
@@ -38,10 +34,6 @@ function App() {
         <Route path="/shop-signup"      element={<ShopOwnerSignUp />} />
 
         <Route path="/chat"             element={<Chat />} />
-        <Route path="/category/dogs"    element={<DogsCategory />} />
-        <Route path="/category/cats"    element={<CatsCategory />} />
-        <Route path="/category/fish"    element={<FishCategory />} />
-        <Route path="/category/birds"   element={<BirdsCategory />} />
         <Route path="/breeding"         element={<Breeding />} />
         <Route path="/adoption"         element={<Adoption />} />
         <Route path="/hosting"          element={<Hosting />} />

@@ -92,7 +92,7 @@ const roles = [
     border: "border-orange-200",
     selectedBorder: "border-orange-500",
     accent: "#ea580c",
-    features: ["Breeding Match", "Adopt a Pet", "Vet Consultations", "Community Forum"],
+    features: ["Pet Companion", "Adopt a Pet", "Vet Consultations", "Community Forum"],
     href: "/signup/owner",
     delay: "0ms",
   },

@@ -696,7 +696,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="db-display text-2xl font-black text-gray-900">My Pets ({myPets.length})</h2>
-                  <p className="text-gray-500 text-sm mt-0.5">Pets you've listed on Breeding Match</p>
+                  <p className="text-gray-500 text-sm mt-0.5">Pets you've listed on Pet Companion</p>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={fetchPets} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm font-semibold hover:bg-gray-50 transition-colors">
@@ -717,7 +717,7 @@ export default function Dashboard() {
                 <div className="bg-white rounded-3xl border-2 border-dashed border-orange-200 p-16 text-center db-pop">
                   <div className="text-7xl mb-5 db-float">🐾</div>
                   <h3 className="db-display text-2xl font-black text-gray-900 mb-2">No pets listed yet</h3>
-                  <p className="text-gray-500 mb-6">Go to Breeding Match to add your pet and start finding matches!</p>
+                  <p className="text-gray-500 mb-6">Go to Pet Companion to add your pet and start finding matches!</p>
                   <Link to="/breeding"
                     className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-orange-500 text-white font-bold hover:bg-orange-600 transition-colors shadow-lg shadow-orange-200">
                     <Plus className="w-5 h-5" /> List My Pet
@@ -1045,7 +1045,7 @@ export default function Dashboard() {
                   <h3 className="db-display font-black text-gray-900 text-lg mb-4">Platform Summary</h3>
                   <div className="space-y-4">
                     {[
-                      { icon: PawPrint, label: "Pets on Breeding Match", value: myPets.length, color: "text-orange-500 bg-orange-50", action: "/breeding" },
+                      { icon: PawPrint, label: "Pets on Pet Companion", value: myPets.length, color: "text-orange-500 bg-orange-50", action: "/breeding" },
                       { icon: ShoppingBag, label: "Store Orders", value: myOrders.length, color: "text-green-500 bg-green-50", action: "/store" },
                       { icon: Stethoscope, label: "Vet Consultations", value: myVetBooks.length, color: "text-red-500 bg-red-50", action: "/vets" },
                       { icon: Home, label: "Host Listings", value: myHostings.length, color: "text-yellow-600 bg-yellow-50", action: "/hosting" },
@@ -1085,7 +1085,7 @@ export default function Dashboard() {
                             <PawPrint className="w-4 h-4 text-orange-500" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-800 truncate">Listed {pet.name} on Breeding Match</p>
+                            <p className="text-sm font-semibold text-gray-800 truncate">Listed {pet.name} on Pet Companion</p>
                             <p className="text-xs text-gray-400">{pet.breed} · {pet.gender}</p>
                           </div>
                         </div>

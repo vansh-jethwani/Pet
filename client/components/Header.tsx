@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Heart, Menu, X } from "lucide-react";
+import { PawPrint, Menu, X } from "lucide-react";
 import { useUser, useClerk, SignedIn, SignedOut } from "@clerk/clerk-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { NotificationBell } from "@/components/NotificationWidget";
@@ -28,7 +28,7 @@ export default function Header() {
   const navItems = [
     { label: "Home",           href: "/"           },
     { label: "Messages",       href: "/chat"        },
-    { label: "Breeding Match", href: "/breeding"    },
+    { label: "Pet Companion", href: "/breeding"    },
     { label: "Adoption",       href: "/adoption"    },
     { label: "Host a Pet",     href: "/hosting"     },
     // { label: "Marketplace",    href: "/marketplace" },
@@ -45,7 +45,7 @@ export default function Header() {
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group">
             <div className="w-10 h-10 bg-gradient-to-br from-dogs to-orange-400 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
-              <Heart className="w-6 h-6 text-white fill-white" />
+              <PawPrint className="w-6 h-6 text-white fill-white" />
             </div>
             <span className="text-xl font-bold bg-gradient-to-r from-dogs to-orange-400 bg-clip-text text-transparent hidden sm:inline">
               PetMatch

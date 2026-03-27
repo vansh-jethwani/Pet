@@ -1,3 +1,4 @@
+import React from "react";
 import { Link } from "react-router-dom";
 import Header from "@/components/Header";
 import {
@@ -23,7 +24,6 @@ export default function Home() {
       <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-yellow-50 py-20 sm:py-32">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Hero Content */}
             <div className="animate-fade-in">
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-gray-900 leading-tight">
                 Find the perfect{" "}
@@ -35,14 +35,13 @@ export default function Home() {
                 Find the perfect companion, breeder, or caretaker for your pet.
               </p>
 
-              {/* Hero CTA Buttons */}
               <div className="mt-10 grid sm:grid-cols-2 gap-4">
                 <Link
                   to="/breeding"
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-dogs hover:bg-orange-600 shadow-lg hover:shadow-xl transition-all hover:scale-105"
                 >
                   <Heart className="w-5 h-5 fill-white" />
-                  Find Breeding Match
+                  Find Pet Companion
                 </Link>
                 <Link
                   to="/adoption"
@@ -71,17 +70,16 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Hero Image */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-4">
                 <Link
-                  to="/category/dogs"
+                  to=""
                   className="rounded-2xl overflow-hidden shadow-lg bg-gradient-to-br from-dogs to-orange-300 h-48 flex items-center justify-center hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer"
                 >
                   <div className="text-6xl">🐕</div>
                 </Link>
                 <Link
-                  to="/category/fish"
+                  to=""
                   className="rounded-2xl overflow-hidden shadow-lg bg-gradient-to-br from-fish to-blue-300 h-40 flex items-center justify-center hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer"
                 >
                   <div className="text-6xl">🐠</div>
@@ -89,13 +87,13 @@ export default function Home() {
               </div>
               <div className="space-y-4 pt-8">
                 <Link
-                  to="/category/cats"
+                  to=""
                   className="rounded-2xl overflow-hidden shadow-lg bg-gradient-to-br from-cats to-yellow-300 h-40 flex items-center justify-center hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer"
                 >
                   <div className="text-6xl">🐱</div>
                 </Link>
                 <Link
-                  to="/category/birds"
+                  to=""
                   className="rounded-2xl overflow-hidden shadow-lg bg-gradient-to-br from-birds to-emerald-300 h-48 flex items-center justify-center hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer"
                 >
                   <div className="text-6xl">🐦</div>
@@ -107,29 +105,25 @@ export default function Home() {
       </section>
 
       {/* Features Grid */}
-      <section className="py-20 sm:py-32 bg-white">
+      <section className="py-20 sm:py-28 bg-white">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
               Everything for Pet Lovers
             </h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              From finding your perfect match to caring for your pet, we've got
-              you covered.
+              From finding your perfect match to caring for your pet, we've got you covered.
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Breeding Match */}
             <FeatureCard
               icon={<Heart className="w-8 h-8" />}
-              title="Breeding Match"
+              title="Pet Companion"
               description="Find compatible pets for breeding with detailed profiles and filters."
               href="/breeding"
               color="from-dogs to-orange-400"
             />
-
-            {/* Adoption */}
             <FeatureCard
               icon={<PawPrint className="w-8 h-8" />}
               title="Adoption"
@@ -137,8 +131,6 @@ export default function Home() {
               href="/adoption"
               color="from-purple-500 to-pink-500"
             />
-
-            {/* Hosting */}
             <FeatureCard
               icon={<HomeIcon className="w-8 h-8" />}
               title="Host a Pet"
@@ -146,8 +138,6 @@ export default function Home() {
               href="/hosting"
               color="from-yellow-400 to-orange-400"
             />
-
-            {/* Messages */}
             <FeatureCard
               icon={<MessageSquare className="w-8 h-8" />}
               title="Messages"
@@ -155,8 +145,6 @@ export default function Home() {
               href="/chat"
               color="from-blue-500 to-cyan-400"
             />
-
-            {/* Vets */}
             <FeatureCard
               icon={<Stethoscope className="w-8 h-8" />}
               title="Vet Consultation"
@@ -164,8 +152,6 @@ export default function Home() {
               href="/vets"
               color="from-red-500 to-pink-400"
             />
-
-            {/* Insurance */}
             <FeatureCard
               icon={<Award className="w-8 h-8" />}
               title="Pet Insurance"
@@ -173,8 +159,6 @@ export default function Home() {
               href="/insurance"
               color="from-indigo-500 to-purple-400"
             />
-
-            {/* Store */}
             <FeatureCard
               icon={<Zap className="w-8 h-8" />}
               title="Pet Food & Store"
@@ -182,8 +166,6 @@ export default function Home() {
               href="/store"
               color="from-green-500 to-emerald-400"
             />
-
-            {/* Community */}
             <FeatureCard
               icon={<Users className="w-8 h-8" />}
               title="Community"
@@ -195,142 +177,138 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Breeding Match Showcase */}
-      <section className="py-20 sm:py-32 bg-gradient-to-br from-orange-50 to-white">
+      {/* ── Pet Companion Showcase ─────────────────────────────────────────── */}
+      <section className="py-20 sm:py-28 bg-orange-50">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-100 text-dogs font-semibold mb-6">
-                <Zap className="w-4 h-4" />
-                Breeding Match
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+
+            {/* Visual card */}
+            <div className="relative flex justify-center">
+              <div className="w-72 h-72 sm:w-96 sm:h-96 rounded-3xl shadow-2xl overflow-hidden">
+                <img
+                  src="https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=600&q=80&fit=crop"
+                  alt="Golden Retriever dog"
+                  className="w-full h-full object-cover"
+                />
               </div>
-              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6">
+              {/* decorative blob */}
+              <div className="absolute -bottom-6 -right-6 w-40 h-40 rounded-3xl bg-orange-200 -z-10" />
+            </div>
+
+            {/* Content */}
+            <div>
+              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-100 text-dogs text-sm font-semibold mb-5">
+                <Zap className="w-4 h-4" /> Pet Companion
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
                 Tinder for Pets
               </h2>
-              <p className="text-lg text-gray-600 mb-6 leading-relaxed">
-                Swipe through potential breeding matches for your dog or cat.
-                Each profile includes detailed information about the pet,
-                vaccination status, location, and owner details.
+              <p className="text-gray-600 text-lg leading-relaxed mb-6">
+                Swipe through potential Pet Companiones for your dog or cat. Each profile includes
+                detailed information about the pet, vaccination status, location, and owner details.
               </p>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-3 text-gray-700">
-                  <span className="w-6 h-6 rounded-full bg-dogs flex items-center justify-center text-white text-sm font-bold">
-                    ✓
-                  </span>
-                  Smart matching algorithm
-                </li>
-                <li className="flex items-center gap-3 text-gray-700">
-                  <span className="w-6 h-6 rounded-full bg-dogs flex items-center justify-center text-white text-sm font-bold">
-                    ✓
-                  </span>
-                  Advanced filtering by breed, age, location
-                </li>
-                <li className="flex items-center gap-3 text-gray-700">
-                  <span className="w-6 h-6 rounded-full bg-dogs flex items-center justify-center text-white text-sm font-bold">
-                    ✓
-                  </span>
-                  Instant chat when matched
-                </li>
+                {[
+                  "Smart matching algorithm",
+                  "Advanced filtering by breed, age, location",
+                  "Instant chat when matched",
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-3 text-gray-700">
+                    <span className="w-6 h-6 rounded-full bg-dogs flex items-center justify-center text-white text-xs font-bold flex-shrink-0">✓</span>
+                    {item}
+                  </li>
+                ))}
               </ul>
               <Link
                 to="/breeding"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-dogs hover:bg-orange-600 shadow-lg hover:shadow-xl transition-all hover:scale-105"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-dogs hover:bg-orange-600 shadow-md hover:shadow-lg transition-all hover:scale-105"
               >
                 Start Matching <ArrowRight className="w-5 h-5" />
               </Link>
             </div>
-            <div className="relative">
-              <div className="rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-dogs to-orange-300 aspect-square flex items-center justify-center">
-                <div className="text-9xl animate-bounce">🐕</div>
-              </div>
-              <div className="absolute -bottom-8 -right-8 w-48 h-48 bg-orange-100 rounded-2xl -z-10"></div>
-            </div>
           </div>
         </div>
       </section>
 
-      {/* Adoption Section */}
-      <section className="py-20 sm:py-32 bg-white">
+      {/* ── Adoption ───────────────────────────────────────────────────────── */}
+      <section className="py-20 sm:py-28 bg-white">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="relative lg:order-last">
-              <div className="rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-purple-500 to-pink-400 aspect-square flex items-center justify-center">
-                <div className="text-9xl">🏠</div>
-              </div>
-              <div className="absolute -top-8 -left-8 w-48 h-48 bg-purple-100 rounded-2xl -z-10"></div>
-            </div>
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+
+            {/* Content first on mobile, second on desktop */}
             <div className="lg:order-first">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-100 text-purple-700 font-semibold mb-6">
-                <PawPrint className="w-4 h-4" />
-                Adoption
-              </div>
-              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6">
+              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-100 text-purple-700 text-sm font-semibold mb-5">
+                <PawPrint className="w-4 h-4" /> Adoption
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
                 Give a Pet a Forever Home
               </h2>
-              <p className="text-lg text-gray-600 mb-6 leading-relaxed">
-                Browse adoptable pets from shelters and rescues. View their
-                stories, filter by breed, age, and location, and apply for
-                adoption with just a few clicks.
+              <p className="text-gray-600 text-lg leading-relaxed mb-6">
+                Browse adoptable pets from shelters and rescues. View their stories, filter by breed,
+                age, and location, and apply for adoption with just a few clicks.
               </p>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-3 text-gray-700">
-                  <span className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center text-white text-sm font-bold">
-                    ✓
-                  </span>
-                  Verified rescue organizations
-                </li>
-                <li className="flex items-center gap-3 text-gray-700">
-                  <span className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center text-white text-sm font-bold">
-                    ✓
-                  </span>
-                  Pet stories and backgrounds
-                </li>
-                <li className="flex items-center gap-3 text-gray-700">
-                  <span className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center text-white text-sm font-bold">
-                    ✓
-                  </span>
-                  Simple adoption process
-                </li>
+                {[
+                  "Verified rescue organizations",
+                  "Pet stories and backgrounds",
+                  "Simple adoption process",
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-3 text-gray-700">
+                    <span className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">✓</span>
+                    {item}
+                  </li>
+                ))}
               </ul>
               <Link
                 to="/adoption"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-purple-500 hover:bg-purple-600 shadow-lg hover:shadow-xl transition-all hover:scale-105"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-purple-500 hover:bg-purple-600 shadow-md hover:shadow-lg transition-all hover:scale-105"
               >
                 Browse Pets <ArrowRight className="w-5 h-5" />
               </Link>
             </div>
+
+            {/* Visual */}
+            <div className="relative flex justify-center lg:order-last">
+              <div className="w-72 h-72 sm:w-96 sm:h-96 rounded-3xl shadow-2xl overflow-hidden">
+                <img
+                  src="https://images.unsplash.com/photo-1601758124510-52d02ddb7cbd?w=600&q=80&fit=crop"
+                  alt="Person adopting a cat"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="absolute -top-6 -left-6 w-40 h-40 rounded-3xl bg-purple-100 -z-10" />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Pet Hosting Section */}
-      <section className="py-20 sm:py-32 bg-gradient-to-br from-yellow-50 to-orange-50">
+      {/* ── Pet Hosting ────────────────────────────────────────────────────── */}
+      <section className="py-20 sm:py-28 bg-yellow-50">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-100 text-yellow-700 font-semibold mb-6">
-              <HomeIcon className="w-4 h-4" />
-              Pet Hosting
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+
+          {/* Header */}
+          <div className="text-center mb-14">
+            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-yellow-100 text-yellow-700 text-sm font-semibold mb-5">
+              <HomeIcon className="w-4 h-4" /> Pet Hosting
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">
               Host Pets or Find a Host
             </h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Earn money by hosting other people's pets, or find trusted hosts
-              for your furry friends.
+            <p className="text-gray-600 text-lg max-w-xl mx-auto">
+              Earn money by hosting other people's pets, or find trusted hosts for your furry friends.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8">
-            <div className="bg-white rounded-2xl p-8 shadow-lg border border-yellow-100 hover:shadow-xl transition-shadow">
-              <div className="w-12 h-12 rounded-xl bg-yellow-100 flex items-center justify-center mb-4">
-                <HomeIcon className="w-6 h-6 text-yellow-600" />
+          {/* Two cards */}
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            <div className="bg-white rounded-2xl p-8 shadow-md border border-yellow-100 hover:shadow-xl transition-shadow">
+              <div className="w-14 h-14 rounded-2xl bg-yellow-100 flex items-center justify-center mb-5">
+                <HomeIcon className="w-7 h-7 text-yellow-600" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-4">
-                Become a Host
-              </h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">Become a Host</h3>
               <p className="text-gray-600 mb-6 leading-relaxed">
-                Open your home to pets and earn extra income. Set your own
-                pricing, availability, and pet preferences.
+                Open your home to pets and earn extra income. Set your own pricing,
+                availability, and pet preferences.
               </p>
               <Link
                 to="/hosting"
@@ -341,16 +319,14 @@ export default function Home() {
               </Link>
             </div>
 
-            <div className="bg-white rounded-2xl p-8 shadow-lg border border-yellow-100 hover:shadow-xl transition-shadow">
-              <div className="w-12 h-12 rounded-xl bg-yellow-100 flex items-center justify-center mb-4">
-                <Users className="w-6 h-6 text-yellow-600" />
+            <div className="bg-white rounded-2xl p-8 shadow-md border border-yellow-100 hover:shadow-xl transition-shadow">
+              <div className="w-14 h-14 rounded-2xl bg-yellow-100 flex items-center justify-center mb-5">
+                <Users className="w-7 h-7 text-yellow-600" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-4">
-                Find a Host
-              </h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">Find a Host</h3>
               <p className="text-gray-600 mb-6 leading-relaxed">
-                Search for trustworthy pet hosts by location, price, and
-                reviews. Leave your pet in good hands.
+                Search for trustworthy pet hosts by location, price, and reviews.
+                Leave your pet in good hands.
               </p>
               <Link
                 to="/hosting"
@@ -364,38 +340,89 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Vet Consultation Section */}
-      <section className="py-20 sm:py-32 bg-white">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-100 text-red-700 font-semibold mb-6">
-              <Stethoscope className="w-4 h-4" />
-              Vet Consultation
+      {/* ── Photo Strip ────────────────────────────────────────────────────── */}
+      <section className="py-10 bg-white overflow-hidden">
+        <div className="flex gap-4 w-max animate-[scroll_30s_linear_infinite]">
+          {[
+            { src: "https://images.unsplash.com/photo-1517849845537-4d257902454a?w=400&h=300&q=80&fit=crop", alt: "Smiling dog" },
+            { src: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=300&q=80&fit=crop", alt: "Cat portrait" },
+            { src: "https://images.unsplash.com/photo-1583512603806-077998240c7a?w=400&h=300&q=80&fit=crop", alt: "Dog with owner" },
+            { src: "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=400&h=300&q=80&fit=crop", alt: "Two dogs running" },
+            { src: "https://images.unsplash.com/photo-1495360010541-f48722b34f7d?w=400&h=300&q=80&fit=crop", alt: "Kitten" },
+            { src: "https://images.unsplash.com/photo-1450778869180-41d0601e046e?w=400&h=300&q=80&fit=crop", alt: "Dog and cat together" },
+            { src: "https://images.unsplash.com/photo-1425082661705-1834bfd09dca?w=400&h=300&q=80&fit=crop", alt: "Rabbit pet" },
+            { src: "https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?w=400&h=300&q=80&fit=crop", alt: "Dog portrait" },
+            /* duplicate for seamless loop */
+            { src: "https://images.unsplash.com/photo-1517849845537-4d257902454a?w=400&h=300&q=80&fit=crop", alt: "Smiling dog" },
+            { src: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=300&q=80&fit=crop", alt: "Cat portrait" },
+            { src: "https://images.unsplash.com/photo-1583512603806-077998240c7a?w=400&h=300&q=80&fit=crop", alt: "Dog with owner" },
+            { src: "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=400&h=300&q=80&fit=crop", alt: "Two dogs running" },
+          ].map((img, i) => (
+            <div key={i} className="w-72 h-48 rounded-2xl overflow-hidden flex-shrink-0 shadow-md">
+              <img src={img.src} alt={img.alt} className="w-full h-full object-cover" />
             </div>
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+          ))}
+        </div>
+        <style>{`
+          @keyframes scroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
+        `}</style>
+      </section>
+
+      {/* ── Vet Consultation ───────────────────────────────────────────────── */}
+      <section className="py-20 sm:py-28 bg-white">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+
+          <div className="text-center mb-14">
+            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-100 text-red-600 text-sm font-semibold mb-5">
+              <Stethoscope className="w-4 h-4" /> Vet Consultation
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">
               Connect with Veterinarians
             </h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Book consultations with licensed veterinarians via video, phone,
-              or in-person visits.
+            <p className="text-gray-600 text-lg max-w-xl mx-auto">
+              Book consultations with licensed veterinarians via video, phone, or in-person visits.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {[
-              { title: "Video Call", description: "Real-time video consultation from home", icon: "📹" },
-              { title: "Phone Call", description: "Quick advice through phone call", icon: "☎️" },
-              { title: "Clinic Visit", description: "Visit the vet's physical clinic", icon: "🏥" },
-            ].map((consultation) => (
+              {
+                title: "Video Call",
+                description: "Real-time video consultation from the comfort of home",
+                img: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=400&q=80&fit=crop",
+                alt: "Vet video call consultation",
+              },
+              {
+                title: "Phone Call",
+                description: "Get quick advice with a simple phone call",
+                img: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=400&q=80&fit=crop",
+                alt: "Veterinarian on phone",
+              },
+              {
+                title: "Clinic Visit",
+                description: "Visit the vet's physical clinic in person",
+                img: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=400&q=80&fit=crop",
+                alt: "Vet clinic visit with dog",
+              },
+            ].map((item) => (
               <div
-                key={consultation.title}
-                className="bg-gradient-to-br from-red-50 to-pink-50 rounded-2xl p-8 border border-red-100 text-center hover:shadow-lg transition-shadow"
+                key={item.title}
+                className="rounded-2xl border border-red-100 overflow-hidden hover:shadow-lg transition-shadow bg-white"
               >
-                <div className="text-5xl mb-4">{consultation.icon}</div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">
-                  {consultation.title}
-                </h3>
-                <p className="text-gray-600">{consultation.description}</p>
+                <div className="h-44 overflow-hidden">
+                  <img
+                    src={item.img}
+                    alt={item.alt}
+                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                  />
+                </div>
+                <div className="p-5 text-center">
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">{item.title}</h3>
+                  <p className="text-gray-500 text-sm">{item.description}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -403,7 +430,7 @@ export default function Home() {
           <div className="text-center mt-12">
             <Link
               to="/vets"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-red-500 hover:bg-red-600 shadow-lg hover:shadow-xl transition-all hover:scale-105"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-red-500 hover:bg-red-600 shadow-md hover:shadow-lg transition-all hover:scale-105"
             >
               Book a Consultation <ArrowRight className="w-5 h-5" />
             </Link>
@@ -411,34 +438,54 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Pet Store Section */}
-      <section className="py-20 sm:py-32 bg-gradient-to-br from-emerald-50 to-green-50">
+      {/* ── Pet Store ──────────────────────────────────────────────────────── */}
+      <section className="py-20 sm:py-28 bg-emerald-50">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-100 text-emerald-700 font-semibold mb-6">
-              <ShoppingCart className="w-4 h-4" />
-              Pet Store
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-              Everything Your Pet Needs
-            </h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Shop quality pet food, toys, grooming products, and accessories.
-            </p>
-          </div>
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
 
-          <div className="text-center">
-            <Link
-              to="/store"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-emerald-500 hover:bg-emerald-600 shadow-lg hover:shadow-xl transition-all hover:scale-105"
-            >
-              Shop Now <ArrowRight className="w-5 h-5" />
-            </Link>
+            {/* Content */}
+            <div>
+              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-sm font-semibold mb-5">
+                <ShoppingCart className="w-4 h-4" /> Pet Store
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+                Everything Your Pet Needs
+              </h2>
+              <p className="text-gray-600 text-lg leading-relaxed mb-6">
+                Shop quality pet food, toys, grooming products, and accessories — all in one place,
+                delivered right to your door.
+              </p>
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                {["🦴 Premium Food", "🧸 Toys & Games", "✂️ Grooming", "🎒 Accessories"].map((item) => (
+                  <div key={item} className="flex items-center gap-2 text-gray-700 bg-white rounded-xl px-4 py-3 shadow-sm border border-emerald-100 text-sm font-medium">
+                    {item}
+                  </div>
+                ))}
+              </div>
+              <Link
+                to="/store"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-emerald-500 hover:bg-emerald-600 shadow-md hover:shadow-lg transition-all hover:scale-105"
+              >
+                Shop Now <ArrowRight className="w-5 h-5" />
+              </Link>
+            </div>
+
+            {/* Visual */}
+            <div className="relative flex justify-center">
+              <div className="w-72 h-72 sm:w-96 sm:h-96 rounded-3xl shadow-2xl overflow-hidden">
+                <img
+                  src="https://images.unsplash.com/photo-1548767797-d8c844163c4c?w=600&q=80&fit=crop"
+                  alt="Pet food and accessories store"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="absolute -bottom-6 -right-6 w-40 h-40 rounded-3xl bg-emerald-200 -z-10" />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
+      {/* ── Footer ─────────────────────────────────────────────────────────── */}
       <footer className="bg-gray-900 text-gray-400 py-12 sm:py-16">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
@@ -451,66 +498,30 @@ export default function Home() {
             <div>
               <h4 className="text-white font-semibold mb-4">Services</h4>
               <ul className="space-y-2 text-sm">
-                <li>
-                  <Link to="/breeding" className="hover:text-white transition">
-                    Breeding Match
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/adoption" className="hover:text-white transition">
-                    Adoption
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/hosting" className="hover:text-white transition">
-                    Pet Hosting
-                  </Link>
-                </li>
+                <li><Link to="/breeding" className="hover:text-white transition">Pet Companion</Link></li>
+                <li><Link to="/adoption" className="hover:text-white transition">Adoption</Link></li>
+                <li><Link to="/hosting" className="hover:text-white transition">Pet Hosting</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="text-white font-semibold mb-4">Company</h4>
               <ul className="space-y-2 text-sm">
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    About Us
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    Blog
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    Careers
-                  </a>
-                </li>
+                <li><a href="#" className="hover:text-white transition">About Us</a></li>
+                <li><a href="#" className="hover:text-white transition">Blog</a></li>
+                <li><a href="#" className="hover:text-white transition">Careers</a></li>
               </ul>
             </div>
             <div>
               <h4 className="text-white font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-sm">
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    Privacy
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    Terms
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition">
-                    Contact
-                  </a>
-                </li>
+                <li><a href="#" className="hover:text-white transition">Privacy</a></li>
+                <li><a href="#" className="hover:text-white transition">Terms</a></li>
+                <li><a href="#" className="hover:text-white transition">Contact</a></li>
               </ul>
             </div>
           </div>
           <div className="border-t border-gray-800 pt-8 text-center text-sm">
-            <p>&copy; 2024 PetMatch. All rights reserved.</p>
+            <p>&copy; 2026 PetMatch. All rights reserved.</p>
           </div>
         </div>
       </footer>
