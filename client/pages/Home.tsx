@@ -76,13 +76,13 @@ export default function Home() {
                   to=""
                   className="rounded-2xl overflow-hidden shadow-lg bg-gradient-to-br from-dogs to-orange-300 h-48 flex items-center justify-center hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer"
                 >
-                  <div className="text-6xl">🐕</div>
+                  <img src="https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=400&q=80&fit=crop" alt="Dog" className="w-full h-full object-cover" />
                 </Link>
                 <Link
                   to=""
                   className="rounded-2xl overflow-hidden shadow-lg bg-gradient-to-br from-fish to-blue-300 h-40 flex items-center justify-center hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer"
                 >
-                  <div className="text-6xl">🐠</div>
+                  <img src="https://images.unsplash.com/photo-1522069169874-c58ec4b76be5?w=400&q=80&fit=crop" alt="Fish" className="w-full h-full object-cover" />
                 </Link>
               </div>
               <div className="space-y-4 pt-8">
@@ -90,13 +90,13 @@ export default function Home() {
                   to=""
                   className="rounded-2xl overflow-hidden shadow-lg bg-gradient-to-br from-cats to-yellow-300 h-40 flex items-center justify-center hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer"
                 >
-                  <div className="text-6xl">🐱</div>
+                  <img src="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&q=80&fit=crop" alt="Cat" className="w-full h-full object-cover" />
                 </Link>
                 <Link
                   to=""
                   className="rounded-2xl overflow-hidden shadow-lg bg-gradient-to-br from-birds to-emerald-300 h-48 flex items-center justify-center hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer"
                 >
-                  <div className="text-6xl">🐦</div>
+                  <img src="https://images.unsplash.com/photo-1444464666168-49d633b86797?w=400&q=80&fit=crop" alt="Bird" className="w-full h-full object-cover" />
                 </Link>
               </div>
             </div>
