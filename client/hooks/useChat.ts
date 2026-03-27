@@ -8,8 +8,8 @@ export interface ChatMessage {
   senderName: string;
   senderAvatar: string;
   text: string;
-  timestamp: string;
-  type: "text" | "system";
+  timestamp:    string;
+  type:         "text" | "system" | "call_log";
 }
 
 export interface CallState {
@@ -42,6 +42,10 @@ const ICE_SERVERS = {
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
     { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:stun.voiparound.com" },
+    { urls: "stun:stun.voipbuster.com" },
   ],
 };
 
@@ -51,6 +55,7 @@ function dedupeMsg(prev: ChatMessage[], msg: ChatMessage): ChatMessage[] {
     m => m.id.startsWith("opt_") &&
       m.senderId === msg.senderId &&
       m.text === msg.text &&
+      m.type === msg.type &&
       Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10000
   );
   if (optIdx !== -1) {
@@ -69,10 +74,9 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const currentRoomIdRef     = useRef<string | null>(null);
   const callerIdRef          = useRef<string | null>(null);
-  // BUG-A FIX: store the callType from incoming_call so acceptCall knows
-  // whether to request camera. Previously acceptCall always requested video:true
-  // even when the caller initiated a voice-only call.
   const incomingCallTypeRef  = useRef<"video" | "voice">("video");
+  const callStartTimeRef     = useRef<number | null>(null);
+  const localIceQueueRef     = useRef<RTCIceCandidateInit[]>([]);
 
   const [isConnected,   setIsConnected]   = useState(false);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
@@ -107,6 +111,16 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
     });
   }
 
+  // BUG-7/8 FIX: Use replaceTrack for seamless toggling
+  async function updateTrackOnPC(kind: "audio" | "video", track: MediaStreamTrack | null) {
+    const pc = pcRef.current;
+    if (!pc) return;
+    const sender = pc.getSenders().find(s => s.track?.kind === kind);
+    if (sender) {
+      await sender.replaceTrack(track);
+    }
+  }
+
   function getPeerConnection(): RTCPeerConnection {
     if (pcRef.current) {
       const st = pcRef.current.connectionState;
@@ -117,12 +131,17 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     pcRef.current = pc;
     pc.onicecandidate = (e) => {
-      if (e.candidate && remoteSocketIdRef.current && socketRef.current)
+      if (!e.candidate) return;
+      const candidate = e.candidate.toJSON();
+      if (remoteSocketIdRef.current && socketRef.current) {
         socketRef.current.emit("webrtc_ice_candidate", {
           roomId: currentRoomIdRef.current,
-          candidate: e.candidate.toJSON(),
+          candidate,
           targetSocketId: remoteSocketIdRef.current,
         });
+      } else {
+        localIceQueueRef.current.push(candidate);
+      }
     };
     pc.ontrack = (e) => setRemoteStream(e.streams[0] ?? null);
     pc.onconnectionstatechange = () => {
@@ -139,6 +158,10 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
   async function createOffer(targetSocketId: string) {
     const pc = getPeerConnection();
     if (localStreamRef.current) addTracksToPC(pc, localStreamRef.current);
+    
+    // Flush local ICE queue now that we have a target
+    flushLocalIce(targetSocketId);
+
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socketRef.current?.emit("webrtc_offer", {
@@ -157,6 +180,23 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
     setRemoteStream(null);
     remoteSocketIdRef.current   = null;
     pendingCandidatesRef.current = [];
+    localIceQueueRef.current     = [];
+    callStartTimeRef.current     = null;
+  }
+
+  function flushLocalIce(targetSocketId: string) {
+    const socket = socketRef.current;
+    if (!socket || !targetSocketId) return;
+    while (localIceQueueRef.current.length > 0) {
+      const candidate = localIceQueueRef.current.shift();
+      if (candidate) {
+        socket.emit("webrtc_ice_candidate", {
+          roomId: currentRoomIdRef.current,
+          candidate,
+          targetSocketId,
+        });
+      }
+    }
   }
 
   // ── Socket Init ────────────────────────────────────────────────────────────
@@ -206,8 +246,11 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
       roomId: string; callerId: string; callerName: string;
       callerAvatar: string; socketId: string; callType?: "video" | "voice";
     }) => {
-      remoteSocketIdRef.current    = data.socketId;
       callerIdRef.current          = data.callerId;
+      remoteSocketIdRef.current    = data.socketId;
+      // Flush local ICE queue if we gathered any while ringing
+      flushLocalIce(data.socketId);
+
       // BUG-A FIX: persist callType so acceptCall uses the correct media constraints
       incomingCallTypeRef.current  = data.callType ?? "video";
       setCallState({
@@ -223,6 +266,7 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
     socket.on("call_accepted", async (data: { answererName: string; socketId: string }) => {
       remoteSocketIdRef.current = data.socketId;
       setCallState(prev => ({ ...prev, status: "connected", remoteSocketId: data.socketId }));
+      callStartTimeRef.current = Date.now();
       await createOffer(data.socketId);
     });
 
@@ -299,7 +343,7 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
     });
   }, []);
 
-  const sendMessage = useCallback((text: string) => {
+  const sendMessage = useCallback((text: string, type: "text" | "system" | "call_log" = "text") => {
     const roomId = currentRoomIdRef.current;
     const socket = socketRef.current;
     if (!text.trim() || !socket || !roomId) return;
@@ -318,7 +362,7 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
       senderAvatar: userAvatarRef.current,
       text:         text.trim(),
       timestamp:    new Date().toISOString(),
-      type:         "text",
+      type:         type,
     };
     setMessages(prev => [...prev, optimistic]);
     socket.emit("send_message", {
@@ -327,6 +371,7 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
       senderName:   userNameRef.current,
       senderAvatar: userAvatarRef.current,
       text:         text.trim(),
+      type:         type,
     });
   }, []);
 
@@ -382,6 +427,7 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
       const pc = getPeerConnection();
       addTracksToPC(pc, stream);
       setCallState(prev => ({ ...prev, status: "connected", callType }));
+      callStartTimeRef.current = Date.now();
       socketRef.current?.emit("call_accepted", {
         roomId:       currentRoomIdRef.current,
         callerId:     callerIdRef.current,
@@ -402,30 +448,54 @@ export function useChat({ userId, userName, userAvatar }: UseChatOptions) {
       // BUG-H FIX: send our userId so server can route reliably without socketUserMap
       callerId: userIdRef.current,
     });
+
+    // Automatically send a missed call log if we are rejecting an incoming call
+    const type = incomingCallTypeRef.current ?? "video";
+    sendMessage(JSON.stringify({ type, status: "rejected", duration: 0 }), "call_log");
+
     setCallState({ status: "idle" });
     callerIdRef.current = null;
-  }, []);
+  }, [sendMessage]);
 
   const endCall = useCallback(() => {
+    const status = callState.status;
+    const type = callState.callType ?? "video";
+    const duration = callStartTimeRef.current ? Math.floor((Date.now() - callStartTimeRef.current) / 1000) : 0;
+
     socketRef.current?.emit("call_ended", {
       roomId:   currentRoomIdRef.current,
       // BUG-H FIX: send our userId so server can route reliably without socketUserMap
       callerId: userIdRef.current,
     });
+
+    if (status === "connected") {
+      sendMessage(JSON.stringify({ type, status: "completed", duration }), "call_log");
+    } else if (status === "calling") {
+      sendMessage(JSON.stringify({ type, status: "missed", duration: 0 }), "call_log");
+    }
+
     cleanupCall();
     setCallState({ status: "idle" });
     callerIdRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [sendMessage, callState, cleanupCall]);
 
   const toggleMute = useCallback(() => {
     const t = localStreamRef.current?.getAudioTracks()[0];
-    if (t) { t.enabled = !t.enabled; setIsMuted(!t.enabled); }
+    if (t) {
+      t.enabled = !t.enabled;
+      setIsMuted(!t.enabled);
+      updateTrackOnPC("audio", t.enabled ? t : null);
+    }
   }, []);
 
   const toggleCamera = useCallback(() => {
     const t = localStreamRef.current?.getVideoTracks()[0];
-    if (t) { t.enabled = !t.enabled; setIsCameraOff(!t.enabled); }
+    if (t) {
+      t.enabled = !t.enabled;
+      setIsCameraOff(!t.enabled);
+      updateTrackOnPC("video", t.enabled ? t : null);
+    }
   }, []);
 
   return {

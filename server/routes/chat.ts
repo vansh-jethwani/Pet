@@ -28,7 +28,7 @@ export interface ChatMessage {
   senderAvatar: string;
   text:         string;
   timestamp:    string;
-  type:         "text" | "system";
+  type:         "text" | "system" | "call_log";
 }
 
 export interface SerializedRoom {
@@ -106,7 +106,7 @@ function serializeRoom(room: Room): SerializedRoom {
 }
 
 function makeMessage(roomId: string, data: {
-  senderId: string; senderName: string; senderAvatar: string; text: string;
+  senderId: string; senderName: string; senderAvatar: string; text: string; type?: "text" | "system" | "call_log";
 }): ChatMessage {
   return {
     id:           `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
@@ -116,7 +116,7 @@ function makeMessage(roomId: string, data: {
     senderAvatar: data.senderAvatar,
     text:         data.text,
     timestamp:    new Date().toISOString(),
-    type:         "text",
+    type:         data.type || "text",
   };
 }
 
@@ -342,7 +342,7 @@ export function registerChatHandlers(io: Server) {
     // ── Send message ─────────────────────────────────────────────────────────
     socket.on("send_message", async (data: {
       roomId: string; senderId: string; senderName: string;
-      senderAvatar: string; text: string;
+      senderAvatar: string; text: string; type?: "text" | "system" | "call_log";
     }) => {
       if (!data.text?.trim() || !data.senderId?.trim()) return;
 
@@ -366,6 +366,7 @@ export function registerChatHandlers(io: Server) {
           senderName:   data.senderName,
           senderAvatar: data.senderAvatar,
           text:         data.text.trim(),
+          type:         data.type,
         });
 
         room.messages.push(msg);

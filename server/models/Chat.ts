@@ -8,7 +8,7 @@ export interface ChatMessage {
   senderAvatar: string;
   text: string;
   timestamp: string;
-  type: "text" | "system";
+  type: "text" | "system" | "call_log";
 }
 
 export interface IChatRoom extends Document {
@@ -36,7 +36,7 @@ const ChatMessageSchema = new Schema<ChatMessage>(
     senderAvatar: { type: String, default: "🐾" },
     text: { type: String, required: true },
     timestamp: { type: String, required: true },
-    type: { type: String, enum: ["text", "system"], default: "text" },
+    type: { type: String, enum: ["text", "system", "call_log"], default: "text" },
   },
   { _id: true }   // FIX: keep _id so we can fall back to it as message id
 );

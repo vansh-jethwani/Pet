@@ -23,7 +23,7 @@ interface ChatMessage {
   senderAvatar: string;
   text:         string;
   timestamp:    string;
-  type:         "text" | "system";
+  type:         "text" | "system" | "call_log";
 }
 
 interface ConvRoom {
@@ -63,6 +63,11 @@ const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:stun.voiparound.com" },
+    { urls: "stun:stun.voipbuster.com" },
   ],
 };
 
@@ -146,6 +151,21 @@ function mergeRooms(prev: ConvRoom[], incoming: ConvRoom[]): ConvRoom[] {
   });
 }
 
+function fmtLastMsg(msg: ChatMessage | undefined, myId: string): string {
+  if (!msg) return "Tap to open chat";
+  if (msg.type === "call_log" || (msg.text.startsWith('{"type":') && msg.text.includes('"status":'))) {
+    try {
+      const data = JSON.parse(msg.text);
+      const isMe = msg.senderId === myId;
+      const type = data.type === "video" ? "Video call" : "Voice call";
+      if (data.status === "missed") return isMe ? `Outgoing ${type}` : `Missed ${type}`;
+      if (data.status === "rejected") return isMe ? `${type} declined` : `You declined ${type}`;
+      return `${type} (${Math.floor(data.duration / 60)}:${String(data.duration % 60).padStart(2, "0")})`;
+    } catch { return "Call Log"; }
+  }
+  return msg.senderId === myId ? `You: ${msg.text}` : msg.text;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    SUB-COMPONENTS
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -178,31 +198,28 @@ function IncomingBanner({ info, onVideo, onVoice, onReject }: {
   info: CallInfo; onVideo: () => void; onVoice: () => void; onReject: () => void;
 }) {
   return (
-    <div className="absolute inset-x-0 top-0 z-50 p-3 anim-popIn">
-      <div className="mx-auto max-w-sm rounded-2xl p-3.5 flex items-center gap-3 shadow-2xl border border-orange-500/20"
-        style={{ background: "linear-gradient(135deg,#0f172a,#1e293b)" }}>
+    <div className="fixed inset-x-0 top-10 z-[110] px-4 anim-popIn pointer-events-none">
+      <div className="mx-auto max-w-sm rounded-[2rem] p-4 flex items-center gap-4 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.6)] border border-white/10 pointer-events-auto"
+        style={{ background: "rgba(15,23,42,0.9)", backdropFilter: "blur(24px)" }}>
         <div className="relative flex-shrink-0">
-          <Av src={info.callerAvatar} name={info.callerName} size={12} className="ring-2 ring-orange-500/50 rounded-full" />
-          <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center ring-2 ring-slate-900">
-            <PhoneIncoming className="w-2.5 h-2.5 text-white" />
-          </span>
+          <Av src={info.callerAvatar} name={info.callerName} size={14} className="ring-2 ring-orange-500/50 rounded-full" />
+          <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center ring-4 ring-slate-900 anim-pulse">
+            <PhoneIncoming className="w-3 h-3 text-white" />
+          </div>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-white font-bold text-sm truncate">{info.callerName}</p>
-          <p className="text-orange-400 text-xs anim-pulse">Incoming {info.callType === "voice" ? "Voice" : "Video"} Call…</p>
+          <p className="text-white font-black text-base truncate tracking-tight">{info.callerName}</p>
+          <p className="text-orange-400 text-[11px] font-bold uppercase tracking-wider anim-blink">
+            Incoming {info.callType === "voice" ? "Voice" : "Video"} Call
+          </p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
-          <button onClick={onReject} className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors shadow-lg">
-            <PhoneOff className="w-4 h-4 text-white" />
+          <button onClick={onReject} className="w-11 h-11 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-all shadow-lg hover:scale-105 active:scale-95">
+            <PhoneOff className="w-5 h-5 text-white" />
           </button>
-          {info.callType !== "voice" && (
-            <button onClick={onVoice} className="w-10 h-10 rounded-full bg-slate-600 hover:bg-slate-500 flex items-center justify-center transition-colors shadow-lg">
-              <Phone className="w-4 h-4 text-white" />
-            </button>
-          )}
           <button onClick={info.callType === "voice" ? onVoice : onVideo}
-            className="w-10 h-10 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center transition-colors shadow-lg anim-ring">
-            {info.callType === "voice" ? <Phone className="w-4 h-4 text-white" /> : <Video className="w-4 h-4 text-white" />}
+            className="w-11 h-11 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center transition-all shadow-lg anim-ring hover:scale-105 active:scale-95">
+            {info.callType === "voice" ? <Phone className="w-5 h-5 text-white" /> : <Video className="w-5 h-5 text-white" />}
           </button>
         </div>
       </div>
@@ -221,65 +238,84 @@ function CallOverlay({ localStream, remoteStream, info, isMuted, isCameraOff, el
   useEffect(() => { if (localRef.current  && localStream)  localRef.current.srcObject  = localStream;  }, [localStream]);
   useEffect(() => { if (remoteRef.current && remoteStream) remoteRef.current.srcObject = remoteStream; }, [remoteStream]);
   useEffect(() => {
-  if (remoteAudioRef.current && remoteStream) {
-    remoteAudioRef.current.srcObject = remoteStream;
-    remoteAudioRef.current.muted = false;
-    remoteAudioRef.current.volume = 1;
-  }
-}, [remoteStream]);
+    if (remoteAudioRef.current && remoteStream) {
+      remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.muted = false;
+      remoteAudioRef.current.volume = 1;
+    }
+  }, [remoteStream]);
 
   const isVoice = info.callType === "voice" || info.status === "voice_connected" || info.status === "voice_calling";
   const isConn  = info.status === "connected" || info.status === "voice_connected";
 
   return (
-    <div className="absolute inset-0 z-40 call-bg flex flex-col rounded-r-2xl overflow-hidden anim-popIn">
-      <audio
-      ref={remoteAudioRef}
-      autoPlay
-      playsInline
-    />
-      <div className="flex-1 relative flex items-center justify-center bg-slate-950">
+    <div className="fixed inset-0 z-[100] call-bg flex flex-col anim-popIn bg-slate-950">
+      <audio ref={remoteAudioRef} autoPlay playsInline />
+      
+      {/* Upper info bar */}
+      <div className="absolute top-0 left-0 right-0 z-50 p-6 flex items-center justify-between text-white bg-gradient-to-b from-black/60 to-transparent">
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <Av src={info.callerAvatar} name={info.callerName} size={12} className="ring-2 ring-white/20" />
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 anim-pulse" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg leading-tight">{info.callerName}</h3>
+            <p className="text-white/60 text-xs flex items-center gap-2">
+              <Circle className="w-1.5 h-1.5 fill-green-400 text-green-400" />
+              {isConn ? fmtDur(elapsed) : isVoice ? "Voice Call..." : "Video Call..."}
+            </p>
+          </div>
+        </div>
+        <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
+          <span className="text-xs font-bold uppercase tracking-widest text-white/80">Encrypted Call</span>
+        </div>
+      </div>
+
+      <div className="flex-1 relative flex items-center justify-center">
         {!isVoice && remoteStream
           ? <video ref={remoteRef} autoPlay playsInline className="w-full h-full object-cover" />
           : (
-            <div className="flex flex-col items-center gap-5">
-              <Av src={info.callerAvatar} name={info.callerName} size={28} className="ring-4 ring-orange-500/40" />
-              <div className="text-center">
-                <p className="text-white text-xl font-bold">{info.callerName}</p>
-                <p className="text-orange-400 text-sm mt-1 anim-pulse">{isConn ? fmtDur(elapsed) : isVoice ? "Calling…" : "Ringing…"}</p>
+            <div className="flex flex-col items-center gap-8">
+              <div className="relative">
+                 <div className="absolute inset-0 bg-orange-500 rounded-full blur-3xl opacity-20 anim-pulse" />
+                 <Av src={info.callerAvatar} name={info.callerName} size={48} className="ring-4 ring-white/10 relative z-10" />
+              </div>
+              <div className="text-center relative z-10">
+                <p className="text-white/50 text-sm font-medium uppercase tracking-[0.2em] mb-2">Ongoing Call</p>
+                <p className="text-white text-4xl font-black ch tracking-tight">{info.callerName}</p>
+                <p className="text-orange-400 text-lg font-bold mt-4 ch-mono">{isConn ? fmtDur(elapsed) : "Connecting..."}</p>
               </div>
             </div>
           )}
         {!isVoice && (
-          <div className="absolute top-4 right-4 w-28 h-36 rounded-xl overflow-hidden border-2 border-white/20 shadow-2xl bg-slate-800">
+          <div className="absolute top-24 right-6 w-32 h-44 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-slate-900 group">
             {isCameraOff
-              ? <div className="w-full h-full flex items-center justify-center"><VideoOff className="w-6 h-6 text-white/30" /></div>
+              ? <div className="w-full h-full flex items-center justify-center"><VideoOff className="w-8 h-8 text-white/20" /></div>
               : <video ref={localRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
             }
-          </div>
-        )}
-        {isConn && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-full">
-            <span className="text-white text-xs font-medium ch-mono flex items-center gap-1.5">
-              <Circle className="w-2 h-2 fill-green-400 text-green-400 anim-pulse" />{fmtDur(elapsed)}
-            </span>
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <span className="text-[10px] text-white font-bold uppercase tracking-wider">Self View</span>
+            </div>
           </div>
         )}
       </div>
-      <div className="flex-shrink-0 flex items-center justify-center gap-4 py-5 px-4 border-t border-white/10">
-        <button onClick={onMute} className={cn("w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg",
-          isMuted ? "bg-red-500 text-white" : "bg-white/15 text-white hover:bg-white/25")}>
-          {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+
+      {/* Control Bar */}
+      <div className="flex-shrink-0 flex items-center justify-center gap-6 pb-12 pt-8 px-6 bg-gradient-to-t from-black/80 to-transparent">
+        <button onClick={onMute} className={cn("w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-2xl border-2",
+          isMuted ? "bg-red-500 border-red-400 text-white" : "bg-white/10 border-white/20 text-white hover:bg-white/20 hover:scale-105 active:scale-95")}>
+          {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+        </button>
+        <button onClick={onEnd} className="w-20 h-20 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.4)] transition-all hover:scale-110 active:scale-90 border-4 border-white/10">
+          <PhoneOff className="w-8 h-8 text-white" />
         </button>
         {!isVoice && (
-          <button onClick={onCam} className={cn("w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg",
-            isCameraOff ? "bg-red-500 text-white" : "bg-white/15 text-white hover:bg-white/25")}>
-            {isCameraOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+          <button onClick={onCam} className={cn("w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-2xl border-2",
+            isCameraOff ? "bg-red-500 border-red-400 text-white" : "bg-white/10 border-white/20 text-white hover:bg-white/20 hover:scale-105 active:scale-95")}>
+            {isCameraOff ? <VideoOff className="w-6 h-6" /> : <Video className="w-6 h-6" />}
           </button>
         )}
-        <button onClick={onEnd} className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-2xl transition-all hover:scale-105">
-          <PhoneOff className="w-6 h-6 text-white" />
-        </button>
       </div>
     </div>
   );
@@ -288,6 +324,24 @@ function CallOverlay({ localStream, remoteStream, info, isMuted, isCameraOff, el
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN PAGE
 ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Helpers for deduplication ── */
+const dedupeMsg = (prev: ChatMessage[], msg: ChatMessage): ChatMessage[] => {
+  if (prev.some(m => m.id === msg.id)) return prev;
+  const optIdx = prev.findIndex(
+    m => m.id.startsWith("opt_") &&
+      m.senderId === msg.senderId &&
+      m.text === msg.text &&
+      m.type === msg.type &&
+      Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10000
+  );
+  if (optIdx !== -1) {
+    const next = [...prev];
+    next[optIdx] = msg;
+    return next;
+  }
+  return [...prev, msg];
+};
+
 export default function ChatPage() {
   const { user }  = useUser();
   const location  = useLocation();
@@ -302,6 +356,7 @@ export default function ChatPage() {
   const localStreamRef  = useRef<MediaStream | null>(null);
   const remoteSocketRef = useRef<string | null>(null);
   const icePendingRef   = useRef<RTCIceCandidateInit[]>([]);
+  const localIceQueueRef = useRef<RTCIceCandidateInit[]>([]);
 
   const activeRoomIdRef  = useRef<string | null>(null);
   const autoOpenDoneRef  = useRef(false);
@@ -313,9 +368,8 @@ export default function ChatPage() {
   useEffect(() => { myNameRef.current   = myName;   }, [myName]);
   useEffect(() => { myAvatarRef.current = myAvatar; }, [myAvatar]);
 
-  // Re-subscribe when Clerk finishes loading the user
   useEffect(() => {
-    if (!myId) return;
+    if (!socketRef.current) return;
     const socket = socketRef.current as any;
     if (socket?.connected && socket._doSubscribe) socket._doSubscribe();
   }, [myId]);
@@ -336,6 +390,7 @@ export default function ChatPage() {
   const [callError,     setCallError]     = useState<string | null>(null);
   const [showSidebar,   setShowSidebar]   = useState(true);
   const ringtoneCtxRef  = useRef<AudioContext | null>(null);
+  const callStartTimeRef = useRef<number | null>(null);
 
   const setActiveRoomId = useCallback((id: string | null) => {
     activeRoomIdRef.current = id;
@@ -366,7 +421,23 @@ export default function ChatPage() {
     localStreamRef.current = null;
     setLocalStream(null); setRemoteStream(null);
     remoteSocketRef.current = null; icePendingRef.current = [];
+    localIceQueueRef.current = [];
     setIsMuted(false); setIsCameraOff(false);
+  }, []);
+
+  const flushLocalIce = useCallback((targetSocketId: string) => {
+    const socket = socketRef.current;
+    if (!socket || !targetSocketId) return;
+    while (localIceQueueRef.current.length > 0) {
+      const candidate = localIceQueueRef.current.shift();
+      if (candidate) {
+        socket.emit("webrtc_ice_candidate", {
+          roomId: activeRoomIdRef.current,
+          candidate,
+          targetSocketId,
+        });
+      }
+    }
   }, []);
 
   const getPC = useCallback((): RTCPeerConnection => {
@@ -378,12 +449,17 @@ export default function ChatPage() {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     pcRef.current = pc;
     pc.onicecandidate = e => {
-      if (e.candidate && remoteSocketRef.current && socketRef.current)
+      if (!e.candidate) return;
+      const candidate = e.candidate.toJSON();
+      if (remoteSocketRef.current && socketRef.current) {
         socketRef.current.emit("webrtc_ice_candidate", {
           roomId: activeRoomIdRef.current,
-          candidate: e.candidate.toJSON(),
+          candidate,
           targetSocketId: remoteSocketRef.current,
         });
+      } else {
+        localIceQueueRef.current.push(candidate);
+      }
     };
     pc.ontrack = e => setRemoteStream(e.streams[0]);
     pc.onconnectionstatechange = () => {
@@ -400,9 +476,19 @@ export default function ChatPage() {
     stream.getTracks().forEach(track => { if (!existing.has(track.id)) pc.addTrack(track, stream); });
   }, []);
 
+  const updateTrackOnPC = useCallback(async (kind: "audio" | "video", track: MediaStreamTrack | null) => {
+    const pc = pcRef.current;
+    if (!pc) return;
+    const sender = pc.getSenders().find(s => s.track?.kind === kind);
+    if (sender) {
+      await sender.replaceTrack(track);
+    }
+  }, []);
+
   const createAndSendOffer = useCallback(async (targetSocketId: string) => {
     const pc = getPC();
     if (localStreamRef.current) addTracksToPC(pc, localStreamRef.current);
+    flushLocalIce(targetSocketId);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socketRef.current?.emit("webrtc_offer", { roomId: activeRoomIdRef.current, offer, targetSocketId });
@@ -425,6 +511,17 @@ export default function ChatPage() {
 
   const stopRingtone = useCallback(() => {
     try { ringtoneCtxRef.current?.close(); ringtoneCtxRef.current = null; } catch {}
+  }, []);
+
+  const moveRoomToTop = useCallback((roomId: string) => {
+    setRooms(prev => {
+      const index = prev.findIndex(r => r.id === roomId);
+      if (index === -1) return prev;
+      const updated = prev[index];
+      const newList = [...prev];
+      newList.splice(index, 1);
+      return [updated, ...newList];
+    });
   }, []);
 
   /* ── Socket setup ── */
@@ -463,7 +560,7 @@ export default function ChatPage() {
       ownerId?: string; ownerName?: string;
       seekerId?: string; seekerName?: string; seekerAvatar?: string;
     }) => {
-      setMessages(data.messages ?? []);
+      if (data.roomId === activeRoomIdRef.current) setMessages(data.messages ?? []);
       setRooms(prev => {
         const exists = prev.some(r => r.id === data.roomId);
         if (exists) {
@@ -500,17 +597,9 @@ export default function ChatPage() {
     });
 
     socket.on("new_message", (msg: ChatMessage) => {
+      console.log("📩 new_message", msg);
       if (msg.roomId === activeRoomIdRef.current) {
-        setMessages(prev => {
-          if (prev.some(m => m.id === msg.id)) return prev;
-          const optIdx = prev.findIndex(
-            m => m.id.startsWith("opt_") && m.senderId === msg.senderId &&
-              m.text === msg.text &&
-              Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10000
-          );
-          if (optIdx !== -1) { const next = [...prev]; next[optIdx] = msg; return next; }
-          return [...prev, msg];
-        });
+        setMessages(prev => dedupeMsg(prev, msg));
         setRooms(prev => prev.map(r => r.id === msg.roomId ? { ...r, unread: 0 } : r));
         moveRoomToTop(msg.roomId);
       } else {
@@ -523,19 +612,9 @@ export default function ChatPage() {
       }
     });
 
-    // inbox_message arrives on personal channel — also update active chat window
     socket.on("inbox_message", (data: { roomId: string; message: ChatMessage }) => {
       if (data.roomId === activeRoomIdRef.current) {
-        setMessages(prev => {
-          if (prev.some(m => m.id === data.message.id)) return prev;
-          const optIdx = prev.findIndex(
-            m => m.id.startsWith("opt_") && m.senderId === data.message.senderId &&
-              m.text === data.message.text &&
-              Math.abs(new Date(m.timestamp).getTime() - new Date(data.message.timestamp).getTime()) < 10000
-          );
-          if (optIdx !== -1) { const next = [...prev]; next[optIdx] = data.message; return next; }
-          return [...prev, data.message];
-        });
+        setMessages(prev => dedupeMsg(prev, data.message));
       }
       setRooms(prev => prev.map(r => {
         if (r.id !== data.roomId) return r;
@@ -549,12 +628,13 @@ export default function ChatPage() {
     socket.on("user_typing",         ({ userName: n }: { userName: string }) => setTypingUser(n));
     socket.on("user_stopped_typing", () => setTypingUser(null));
 
-    // Call signals arrive on callChannel (single delivery, no duplicates)
+    // Call signals arrive on callChannel
     socket.on("incoming_call", (data: {
       roomId: string; callerId: string; callerName: string;
       callerAvatar: string; callType: "video" | "voice"; socketId: string;
     }) => {
       remoteSocketRef.current = data.socketId;
+      flushLocalIce(data.socketId);
       setCallInfo({ status: "incoming", callerName: data.callerName, callerAvatar: data.callerAvatar,
         callerId: data.callerId, callType: data.callType, remoteSocket: data.socketId });
       startRingtone();
@@ -565,11 +645,13 @@ export default function ChatPage() {
     }) => {
       stopRingtone();
       remoteSocketRef.current = data.socketId;
+      flushLocalIce(data.socketId);
       setCallInfo(prev => ({
         ...prev,
         status: data.callType === "voice" ? "voice_connected" : "connected",
         remoteSocket: data.socketId, callType: data.callType,
       }));
+      callStartTimeRef.current = Date.now();
       await createAndSendOffer(data.socketId);
     });
 
@@ -603,8 +685,7 @@ export default function ChatPage() {
     });
 
     return () => { socket.disconnect(); cleanupCall(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [getPC, addTracksToPC, flushLocalIce, startRingtone, stopRingtone, cleanupCall]);
 
   /* ── Open a conversation ── */
   const openRoom = useCallback((room: ConvRoom) => {
@@ -671,19 +752,7 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myId, rooms, connected]);
 
-  const moveRoomToTop = useCallback((roomId: string) => {
-  setRooms(prev => {
-    const index = prev.findIndex(r => r.id === roomId);
-    if (index === -1) return prev;
 
-    const updated = prev[index];
-
-    const newList = [...prev];
-    newList.splice(index, 1);
-
-    return [updated, ...newList];
-  });
-}, []);
 
   /* ── Send message ── */
   const sendMessage = useCallback(() => {
@@ -709,11 +778,32 @@ export default function ChatPage() {
     };
     setMessages(prev => [...prev, optimistic]);
 moveRoomToTop(roomId);
-    socket.emit("send_message", { roomId, senderId, senderName: myNameRef.current, senderAvatar: myAvatarRef.current, text });
+    socket.emit("send_message", { roomId, senderId, senderName: myNameRef.current, senderAvatar: myAvatarRef.current, text, type: "text" });
     setInputText("");
     socket.emit("typing_stop", { roomId });
     if (typingTimer.current) clearTimeout(typingTimer.current);
-  }, [inputText]);
+  }, [inputText, moveRoomToTop]);
+
+  const sendCallLog = useCallback((data: { type: string; status: string; duration: number }) => {
+    const roomId = activeRoomIdRef.current;
+    const socket = socketRef.current;
+    const senderId = myIdRef.current?.trim();
+    if (!roomId || !socket || !senderId) return;
+
+    const logText = JSON.stringify(data);
+    const optimistic = {
+      id:           `log_${Date.now()}`,
+      roomId,
+      senderId,
+      senderName:   myNameRef.current,
+      senderAvatar: myAvatarRef.current,
+      text:         logText,
+      timestamp:    new Date().toISOString(),
+      type:         "call_log" as const,
+    };
+    setMessages(prev => [...prev, optimistic]);
+    socket.emit("send_message", { roomId, senderId, senderName: myNameRef.current, senderAvatar: myAvatarRef.current, text: logText, type: "call_log" });
+  }, [myAvatarRef, myIdRef, myNameRef]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputText(e.target.value);
@@ -748,8 +838,8 @@ moveRoomToTop(roomId);
       const stream = await acquireMedia(type === "video");
       localStreamRef.current = stream; setLocalStream(stream);
       const pc = getPC(); addTracksToPC(pc, stream);
-      setCallInfo({ status: type === "voice" ? "voice_calling" : "calling", callType: type });
-      startRingtone();
+      setCallInfo(prev => ({ ...prev, status: type === "voice" ? "voice_calling" : "calling", callType: type }));
+      callStartTimeRef.current = Date.now();
       socketRef.current?.emit("call_initiate", {
         roomId: activeRoomIdRef.current,
         callerId: myIdRef.current, callerName: myNameRef.current,
@@ -769,6 +859,7 @@ moveRoomToTop(roomId);
       localStreamRef.current = stream; setLocalStream(stream);
       const pc = getPC(); addTracksToPC(pc, stream);
       setCallInfo(prev => ({ ...prev, status: type === "voice" ? "voice_connected" : "connected", callType: type }));
+      callStartTimeRef.current = Date.now();
       socketRef.current?.emit("call_accepted", {
         roomId: activeRoomIdRef.current, callerId: callInfo.callerId,
         answererName: myNameRef.current, callType: type,
@@ -783,32 +874,51 @@ moveRoomToTop(roomId);
 
   const rejectCall = useCallback(() => {
     stopRingtone();
+    const type = callInfo.callType ?? "video";
+    sendCallLog({ type, status: "rejected", duration: 0 });
     socketRef.current?.emit("call_rejected", {
       roomId: activeRoomIdRef.current,
-      // BUG-H FIX: include our userId so server can route without socketUserMap
       callerId: myIdRef.current,
     });
     setCallInfo({ status: "idle" });
-  }, [stopRingtone]);
+  }, [sendCallLog, stopRingtone, callInfo.callType]);
 
   const endCall = useCallback(() => {
     stopRingtone();
+    const status = callInfo.status;
+    const type = callInfo.callType ?? "video";
+    const dur = callStartTimeRef.current ? Math.floor((Date.now() - callStartTimeRef.current) / 1000) : 0;
+
+    if (status === "connected" || status === "voice_connected") {
+      sendCallLog({ type, status: "completed", duration: dur });
+    } else if (status === "calling" || status === "voice_calling") {
+      sendCallLog({ type, status: "missed", duration: 0 });
+    }
+
     socketRef.current?.emit("call_ended", {
       roomId: activeRoomIdRef.current,
-      // BUG-H FIX: include our userId so server can route without socketUserMap
       callerId: myIdRef.current,
     });
     cleanupCall(); setCallInfo({ status: "idle" });
-  }, [cleanupCall, stopRingtone]);
+  }, [sendCallLog, cleanupCall, stopRingtone, callInfo.status, callInfo.callType]);
 
   const toggleMute = useCallback(() => {
     const t = localStreamRef.current?.getAudioTracks()[0];
-    if (t) { t.enabled = !t.enabled; setIsMuted(!t.enabled); }
-  }, []);
+    if (t) {
+      t.enabled = !t.enabled;
+      setIsMuted(!t.enabled);
+      updateTrackOnPC("audio", t.enabled ? t : null);
+    }
+  }, [updateTrackOnPC]);
+
   const toggleCamera = useCallback(() => {
     const t = localStreamRef.current?.getVideoTracks()[0];
-    if (t) { t.enabled = !t.enabled; setIsCameraOff(!t.enabled); }
-  }, []);
+    if (t) {
+      t.enabled = !t.enabled;
+      setIsCameraOff(!t.enabled);
+      updateTrackOnPC("video", t.enabled ? t : null);
+    }
+  }, [updateTrackOnPC]);
 
   /* ── Derived ── */
   const callActive = ["calling","voice_calling","connected","voice_connected"].includes(callInfo.status);
@@ -948,7 +1058,7 @@ moveRoomToTop(roomId);
                           </div>
                           <p className="text-xs text-orange-500 font-semibold truncate">{room.petName}</p>
                           <p className="text-xs text-gray-500 truncate mt-0.5">
-                            {last ? (last.senderId === myId ? `You: ${last.text}` : last.text) : "Tap to open chat"}
+                            {fmtLastMsg(last, myId)}
                           </p>
                         </div>
                         {room.unread > 0 && (
@@ -1052,10 +1162,37 @@ moveRoomToTop(roomId);
 
                     {messages.map((msg, i) => {
                       const isMe = msg.senderId === myId;
-                      if (msg.type === "system") {
+                      const isSystem = msg.type === "system";
+                      const isCallLog = msg.type === "call_log" || (msg.text.startsWith('{"type":') && msg.text.includes('"status":'));
+
+                      if (isSystem) {
                         return (
                           <div key={msg.id} className="flex justify-center">
                             <span className="text-[10px] text-gray-400 bg-gray-100 px-3 py-1 rounded-full">{msg.text}</span>
+                          </div>
+                        );
+                      }
+                      if (isCallLog) {
+                        let data = { type: "video" as "video"|"voice", status: "missed", duration: 0 };
+                        try { data = JSON.parse(msg.text); } catch (e) {}
+                        const isVideo = data.type === "video";
+                        const Icon = data.status === "missed" || data.status === "rejected" ? PhoneOff : (isVideo ? Video : Phone);
+                        const label = data.status === "missed" ? `Missed ${data.type} call` : 
+                                      data.status === "rejected" ? `${data.type} call declined` :
+                                      `${isVideo ? "Video" : "Voice"} call, ${Math.floor(data.duration / 60)}:${String(data.duration % 60).padStart(2, "0")}`;
+                        
+                        return (
+                          <div key={msg.id} className="flex justify-center my-3 anim-popIn">
+                            <div className="flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-slate-50 border border-slate-100 shadow-sm">
+                              <div className={cn("w-9 h-9 rounded-full flex items-center justify-center shadow-inner", 
+                                data.status === "missed" ? "bg-red-50 text-red-500" : "bg-orange-50 text-orange-600")}>
+                                <Icon className="w-4 h-4" />
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-slate-700">{label}</span>
+                                <span className="text-[10px] text-slate-400 mt-0.5 font-medium">{fmtTime(msg.timestamp)}</span>
+                              </div>
+                            </div>
                           </div>
                         );
                       }
