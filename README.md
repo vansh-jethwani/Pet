@@ -193,8 +193,8 @@ npm run preview   # Preview production build
 
 **Vansh Jethwani**
 
-- GitHub: your-github-link
-- LinkedIn: your-linkedin-link
+- GitHub: https://github.com/vansh-jethwani
+- LinkedIn: https://www.linkedin.com/in/vansh-jethwani-641154334/
 
 ---
 
