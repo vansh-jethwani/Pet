@@ -38,7 +38,6 @@ PetMatch is a full-stack pet care and community platform that connects pet owner
 - Clerk Authentication
 
 ### Deployment & Tools
-- Netlify
 - REST APIs
 - Responsive UI Design
 - Role-Based Access Control
